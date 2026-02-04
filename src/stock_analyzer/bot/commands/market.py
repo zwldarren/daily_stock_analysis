@@ -68,8 +68,8 @@ class MarketCommand(BotCommand):
         try:
             from stock_analyzer.analyzer import GeminiAnalyzer
             from stock_analyzer.config import get_config
+            from stock_analyzer.infrastructure.notification import NotificationService
             from stock_analyzer.market_analyzer import MarketAnalyzer
-            from stock_analyzer.notification import NotificationService
             from stock_analyzer.search_service import SearchService
 
             config = get_config()

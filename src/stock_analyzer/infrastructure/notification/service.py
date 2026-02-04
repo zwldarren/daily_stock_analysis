@@ -1,0 +1,277 @@
+"""
+通知服务主类
+
+提供统一的接口来管理所有通知渠道
+"""
+
+import logging
+from pathlib import Path
+from typing import Any
+
+from stock_analyzer.analyzer import AnalysisResult
+from stock_analyzer.bot.models import BotMessage
+from stock_analyzer.config import get_settings
+
+from .base import ChannelDetector, NotificationChannel
+from .channels import EmailChannel, FeishuChannel, TelegramChannel, WechatChannel
+from .report_generator import ReportGenerator
+
+logger = logging.getLogger(__name__)
+
+
+class NotificationService:
+    """
+    通知服务
+
+    职责：
+    1. 生成 Markdown 格式的分析日报
+    2. 向所有已配置的渠道推送消息
+    3. 支持本地保存日报
+    """
+
+    def __init__(self, source_message: BotMessage | None = None):
+        """
+        初始化通知服务
+
+        Args:
+            source_message: 来源消息（用于上下文回复）
+        """
+        self._settings = get_settings()
+        self._source_message = source_message
+        self._channels: dict[NotificationChannel, Any] = {}
+
+        # 初始化各渠道
+        self._init_channels()
+
+        # 检测可用渠道
+        self._available_channels = self._detect_available_channels()
+
+        if not self._available_channels:
+            logger.warning("未配置有效的通知渠道，将不发送推送通知")
+        else:
+            channel_names = [ChannelDetector.get_channel_name(ch) for ch in self._available_channels]
+            logger.info(f"已配置 {len(channel_names)} 个通知渠道：{', '.join(channel_names)}")
+
+    def _init_channels(self) -> None:
+        """初始化各通知渠道"""
+        settings = self._settings
+
+        # 企业微信
+        if settings.wechat_webhook_url:
+            self._channels[NotificationChannel.WECHAT] = WechatChannel(
+                {
+                    "webhook_url": settings.wechat_webhook_url,
+                    "msg_type": getattr(settings, "wechat_msg_type", "markdown"),
+                    "max_bytes": getattr(settings, "wechat_max_bytes", 4000),
+                }
+            )
+
+        # 飞书
+        if settings.feishu_webhook_url:
+            self._channels[NotificationChannel.FEISHU] = FeishuChannel(
+                {
+                    "webhook_url": settings.feishu_webhook_url,
+                    "max_bytes": getattr(settings, "feishu_max_bytes", 20000),
+                }
+            )
+
+        # Telegram
+        if settings.telegram_bot_token and settings.telegram_chat_id:
+            self._channels[NotificationChannel.TELEGRAM] = TelegramChannel(
+                {
+                    "bot_token": settings.telegram_bot_token,
+                    "chat_id": settings.telegram_chat_id,
+                    "message_thread_id": getattr(settings, "telegram_message_thread_id", None),
+                }
+            )
+
+        # 邮件
+        if settings.email_sender and settings.email_password:
+            receivers = getattr(settings, "email_receivers", [])
+            if not receivers:
+                receivers = [settings.email_sender]
+            self._channels[NotificationChannel.EMAIL] = EmailChannel(
+                {
+                    "sender": settings.email_sender,
+                    "password": settings.email_password,
+                    "receivers": receivers,
+                }
+            )
+
+    def _detect_available_channels(self) -> list[NotificationChannel]:
+        """检测所有已配置的渠道"""
+        available = []
+        for channel_type, channel in self._channels.items():
+            if channel.is_available():
+                available.append(channel_type)
+        return available
+
+    def is_available(self) -> bool:
+        """检查通知服务是否可用"""
+        return len(self._available_channels) > 0
+
+    def get_available_channels(self) -> list[NotificationChannel]:
+        """获取所有已配置的渠道"""
+        return self._available_channels
+
+    def get_channel_names(self) -> str:
+        """获取所有已配置渠道的名称"""
+        names = [ChannelDetector.get_channel_name(ch) for ch in self._available_channels]
+        return ", ".join(names)
+
+    def generate_daily_report(self, results: list[AnalysisResult], report_date: str | None = None) -> str:
+        """生成日报"""
+        return ReportGenerator.generate_daily_report(results, report_date)
+
+    def generate_dashboard_report(self, results: list[AnalysisResult], report_date: str | None = None) -> str:
+        """生成决策仪表盘报告"""
+        return ReportGenerator.generate_dashboard_report(results, report_date)
+
+    def generate_single_stock_report(self, result: AnalysisResult) -> str:
+        """生成单股报告"""
+        return ReportGenerator.generate_single_stock_report(result)
+
+    def send(self, content: str, **kwargs: Any) -> bool:
+        """
+        统一发送接口 - 向所有已配置的渠道发送
+
+        Args:
+            content: 消息内容（Markdown 格式）
+            **kwargs: 额外参数
+
+        Returns:
+            是否至少有一个渠道发送成功
+        """
+        if not self._available_channels:
+            logger.warning("通知服务不可用，跳过推送")
+            return False
+
+        logger.info(f"正在向 {len(self._available_channels)} 个渠道发送通知：{self.get_channel_names()}")
+
+        success_count = 0
+        fail_count = 0
+
+        for channel_type in self._available_channels:
+            channel = self._channels[channel_type]
+            channel_name = ChannelDetector.get_channel_name(channel_type)
+
+            try:
+                if channel.send(content, **kwargs):
+                    success_count += 1
+                else:
+                    fail_count += 1
+            except Exception as e:
+                logger.error(f"{channel_name} 发送失败: {e}")
+                fail_count += 1
+
+        logger.info(f"通知发送完成：成功 {success_count} 个，失败 {fail_count} 个")
+        return success_count > 0
+
+    def save_report_to_file(self, content: str, filename: str | None = None) -> str:
+        """
+        保存日报到本地文件
+
+        Args:
+            content: 日报内容
+            filename: 文件名（可选，默认按日期生成）
+
+        Returns:
+            保存的文件路径
+        """
+        if filename is None:
+            from datetime import datetime
+
+            date_str = datetime.now().strftime("%Y%m%d")
+            filename = f"report_{date_str}.md"
+
+        # 确保 reports 目录存在
+        reports_dir = Path(__file__).parent.parent.parent.parent / "reports"
+        reports_dir.mkdir(parents=True, exist_ok=True)
+
+        filepath = reports_dir / filename
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        logger.info(f"日报已保存到: {filepath}")
+        return str(filepath)
+
+    def send_to_context(self, content: str) -> bool:
+        """发送报告到上下文（用于机器人回复）"""
+        # TODO: Implement context-based sending using _source_message
+        logger.debug("Context sending not yet implemented")
+        return False
+
+    def generate_wechat_dashboard(self, results: list[AnalysisResult]) -> str:
+        """生成企业微信格式的仪表盘报告"""
+        return self.generate_dashboard_report(results)
+
+    def _send_to_channel(self, channel: NotificationChannel, content: str) -> bool:
+        """发送到指定渠道"""
+        if channel not in self._channels:
+            return False
+        try:
+            return self._channels[channel].send(content)
+        except Exception as e:
+            logger.error(f"Failed to send to {channel}: {e}")
+            return False
+
+    def send_to_wechat(self, content: str) -> bool:
+        """发送到企业微信"""
+        return self._send_to_channel(NotificationChannel.WECHAT, content)
+
+    def send_to_feishu(self, content: str) -> bool:
+        """发送到飞书"""
+        return self._send_to_channel(NotificationChannel.FEISHU, content)
+
+    def send_to_telegram(self, content: str) -> bool:
+        """发送到 Telegram"""
+        return self._send_to_channel(NotificationChannel.TELEGRAM, content)
+
+    def send_to_email(self, content: str) -> bool:
+        """发送到邮件"""
+        return self._send_to_channel(NotificationChannel.EMAIL, content)
+
+    def send_to_custom(self, content: str) -> bool:
+        """发送到自定义 Webhook"""
+        return self._send_to_channel(NotificationChannel.CUSTOM, content)
+
+    def send_to_pushplus(self, content: str) -> bool:
+        """发送到 PushPlus"""
+        return self._send_to_channel(NotificationChannel.PUSHPLUS, content)
+
+    def send_to_discord(self, content: str) -> bool:
+        """发送到 Discord"""
+        return self._send_to_channel(NotificationChannel.DISCORD, content)
+
+    def send_to_pushover(self, content: str) -> bool:
+        """发送到 Pushover"""
+        return self._send_to_channel(NotificationChannel.PUSHOVER, content)
+
+    def send_to_astrbot(self, content: str) -> bool:
+        """发送到 AstrBot"""
+        return self._send_to_channel(NotificationChannel.ASTRBOT, content)
+
+
+# 便捷函数
+def get_notification_service(source_message: BotMessage | None = None) -> NotificationService:
+    """获取通知服务实例"""
+    return NotificationService(source_message=source_message)
+
+
+def send_daily_report(results: list[AnalysisResult]) -> bool:
+    """
+    发送每日报告的快捷方式
+
+    自动识别渠道并推送
+    """
+    service = get_notification_service()
+
+    # 生成报告
+    report = service.generate_dashboard_report(results)
+
+    # 保存到本地
+    service.save_report_to_file(report)
+
+    # 推送到配置的渠道
+    return service.send(report)

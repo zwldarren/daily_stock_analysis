@@ -933,7 +933,16 @@ class GeminiAnalyzer:
         if not stock_name or stock_name == f"股票{code}":
             stock_name = STOCK_NAME_MAP.get(code, f"股票{code}")
 
-        today = context.get("today", {})
+        today = context.get("today", {}).copy()
+
+        # 如果有实时行情数据，用实时价格覆盖历史数据（确保分析使用最新价格）
+        if "realtime" in context:
+            rt = context["realtime"]
+            if rt.get("price"):
+                today["close"] = rt.get("price")
+            # 如果实时数据中有涨跌幅，也优先使用
+            if rt.get("change_percent"):
+                today["pct_chg"] = rt.get("change_percent")
 
         # ========== 构建决策仪表盘格式的输入 ==========
         prompt = f"""# 决策仪表盘分析请求

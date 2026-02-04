@@ -31,10 +31,6 @@ from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from stock_analyzer.config import setup_env
-
-setup_env()
-
 # 代理配置 - 通过 USE_PROXY 环境变量控制，默认关闭
 # GitHub Actions 环境自动跳过代理配置
 if os.getenv("GITHUB_ACTIONS") != "true" and os.getenv("USE_PROXY", "false").lower() == "true":
@@ -45,12 +41,13 @@ if os.getenv("GITHUB_ACTIONS") != "true" and os.getenv("USE_PROXY", "false").low
     os.environ["http_proxy"] = proxy_url
     os.environ["https_proxy"] = proxy_url
 
+from stock_analyzer.infrastructure.notification import NotificationService  # noqa: E402
+
 from .analyzer import GeminiAnalyzer  # noqa: E402
 from .config import Config, get_config  # noqa: E402
 from .core.market_review import run_market_review  # noqa: E402
 from .core.pipeline import StockAnalysisPipeline  # noqa: E402
 from .feishu_doc import FeishuDocManager  # noqa: E402
-from .notification import NotificationService  # noqa: E402
 from .search_service import SearchService  # noqa: E402
 
 # 配置日志格式

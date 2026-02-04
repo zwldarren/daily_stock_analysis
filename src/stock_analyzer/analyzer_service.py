@@ -17,7 +17,7 @@ from stock_analyzer.config import Config, get_config
 from stock_analyzer.core.market_review import run_market_review
 from stock_analyzer.core.pipeline import StockAnalysisPipeline
 from stock_analyzer.enums import ReportType
-from stock_analyzer.notification import NotificationService
+from stock_analyzer.infrastructure.notification import NotificationService
 
 
 def analyze_stock(

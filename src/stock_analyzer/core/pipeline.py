@@ -22,7 +22,7 @@ from stock_analyzer.config import Config, get_config
 from stock_analyzer.data_provider import DataFetcherManager
 from stock_analyzer.data_provider.realtime_types import ChipDistribution
 from stock_analyzer.enums import ReportType
-from stock_analyzer.notification import NotificationChannel, NotificationService
+from stock_analyzer.infrastructure.notification import NotificationChannel, NotificationService
 from stock_analyzer.search_service import SearchService
 from stock_analyzer.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from stock_analyzer.storage import get_db
