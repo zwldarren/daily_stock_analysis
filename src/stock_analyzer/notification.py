@@ -142,6 +142,7 @@ class NotificationService:
         self._telegram_config = {
             "bot_token": getattr(config, "telegram_bot_token", None),
             "chat_id": getattr(config, "telegram_chat_id", None),
+            "message_thread_id": getattr(config, "telegram_message_thread_id", None),
         }
 
         # 邮件配置
@@ -1947,6 +1948,7 @@ class NotificationService:
 
         bot_token = self._telegram_config["bot_token"]
         chat_id = self._telegram_config["chat_id"]
+        message_thread_id = self._telegram_config.get("message_thread_id")
 
         if not bot_token or not chat_id:
             logger.error("Telegram 配置不完整，发送失败")
@@ -1961,10 +1963,10 @@ class NotificationService:
 
             if len(content) <= max_length:
                 # 单条消息发送
-                return self._send_telegram_message(api_url, chat_id, content)
+                return self._send_telegram_message(api_url, chat_id, content, message_thread_id)
             else:
                 # 分段发送长消息
-                return self._send_telegram_chunked(api_url, chat_id, content, max_length)
+                return self._send_telegram_chunked(api_url, chat_id, content, max_length, message_thread_id)
 
         except Exception as e:
             logger.error(f"发送 Telegram 消息失败: {e}")
@@ -1973,7 +1975,9 @@ class NotificationService:
             logger.debug(traceback.format_exc())
             return False
 
-    def _send_telegram_message(self, api_url: str, chat_id: str, text: str) -> bool:
+    def _send_telegram_message(
+        self, api_url: str, chat_id: str, text: str, message_thread_id: str | None = None
+    ) -> bool:
         """发送单条 Telegram 消息"""
         # 转换 Markdown 为 Telegram 支持的格式
         # Telegram 的 Markdown 格式稍有不同，做简单处理
@@ -1985,6 +1989,9 @@ class NotificationService:
             "parse_mode": "Markdown",
             "disable_web_page_preview": True,
         }
+
+        if message_thread_id:
+            payload["message_thread_id"] = message_thread_id
 
         response = requests.post(api_url, json=payload, timeout=10)
 
@@ -2015,7 +2022,9 @@ class NotificationService:
             logger.error(f"响应内容: {response.text}")
             return False
 
-    def _send_telegram_chunked(self, api_url: str, chat_id: str, content: str, max_length: int) -> bool:
+    def _send_telegram_chunked(
+        self, api_url: str, chat_id: str, content: str, max_length: int, message_thread_id: str | None = None
+    ) -> bool:
         """分段发送长 Telegram 消息"""
         # 按段落分割
         sections = content.split("\n---\n")
@@ -2033,7 +2042,7 @@ class NotificationService:
                 if current_chunk:
                     chunk_content = "\n---\n".join(current_chunk)
                     logger.info(f"发送 Telegram 消息块 {chunk_index}...")
-                    if not self._send_telegram_message(api_url, chat_id, chunk_content):
+                    if not self._send_telegram_message(api_url, chat_id, chunk_content, message_thread_id):
                         all_success = False
                     chunk_index += 1
 
@@ -2047,8 +2056,8 @@ class NotificationService:
         # 发送最后一块
         if current_chunk:
             chunk_content = "\n---\n".join(current_chunk)
-            logger.info(f"发送 Telegram 消息块 {chunk_index}（最后）...")
-            if not self._send_telegram_message(api_url, chat_id, chunk_content):
+            logger.info(f"发送 Telegram 消息块 {chunk_index}...")
+            if not self._send_telegram_message(api_url, chat_id, chunk_content, message_thread_id):
                 all_success = False
 
         return all_success
