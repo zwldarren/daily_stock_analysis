@@ -7,9 +7,8 @@ Pydantic 配置类
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from pydantic import BaseModel, Field
 
 
@@ -42,7 +41,7 @@ def parse_bool(value: str | None, default: bool = False) -> bool:
     return value.lower() in ("true", "1", "yes", "on")
 
 
-class Settings(BaseModel):
+class Config(BaseModel):
     """系统配置类 - 使用 Pydantic 提供类型验证"""
 
     # === 自选股配置 ===
@@ -151,7 +150,7 @@ class Settings(BaseModel):
     dingtalk_stream_enabled: bool = False
 
     @classmethod
-    def from_env(cls) -> Settings:
+    def from_env(cls) -> Config:
         """从环境变量加载配置"""
         return cls(
             stock_list=parse_list(os.getenv("STOCK_LIST")),
@@ -227,16 +226,56 @@ class Settings(BaseModel):
             dingtalk_stream_enabled=parse_bool(os.getenv("DINGTALK_STREAM_ENABLED")),
         )
 
+    def get_db_url(self) -> str:
+        """获取 SQLAlchemy 数据库连接 URL"""
+        db_path = Path(self.database_path)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        return f"sqlite:///{db_path.absolute()}"
+
+    def validate_config(self) -> list[str]:
+        """验证配置完整性并返回警告信息列表"""
+        warnings_list: list[str] = []
+
+        if not self.stock_list:
+            warnings_list.append("警告：未配置自选股列表 (STOCK_LIST)")
+
+        if not self.tushare_token:
+            warnings_list.append("提示：未配置 Tushare Token，将使用其他数据源")
+
+        if not self.gemini_api_key and not self.openai_api_key:
+            warnings_list.append("警告：未配置 Gemini 或 OpenAI API Key，AI 分析功能将不可用")
+        elif not self.gemini_api_key:
+            warnings_list.append("提示：未配置 Gemini API Key，将使用 OpenAI 兼容 API")
+
+        if not self.bocha_api_keys and not self.tavily_api_keys and not self.serpapi_keys:
+            warnings_list.append("提示：未配置搜索引擎 API Key (Bocha/Tavily/SerpAPI)，新闻搜索功能将不可用")
+
+        # 检查通知配置
+        has_notification = (
+            self.wechat_webhook_url
+            or self.feishu_webhook_url
+            or (self.telegram_bot_token and self.telegram_chat_id)
+            or (self.email_sender and self.email_password)
+            or (self.pushover_user_key and self.pushover_api_token)
+            or self.pushplus_token
+            or self.discord_webhook_url
+        )
+        if not has_notification:
+            warnings_list.append("提示：未配置通知渠道，将不发送推送通知")
+
+        return warnings_list
+
+    def refresh_stock_list(self) -> None:
+        """热读取 STOCK_LIST 环境变量并更新配置"""
+        env_path = _find_project_root() / ".env"
+        if env_path.exists():
+            env_values = dotenv_values(env_path)
+            stock_list_str = (env_values.get("STOCK_LIST") or "").strip()
+            if stock_list_str:
+                self.stock_list = [code.strip() for code in stock_list_str.split(",") if code.strip()]
+
 
 @lru_cache
-def get_settings() -> Settings:
+def get_config() -> Config:
     """获取配置实例（单例）"""
-    return Settings.from_env()
-
-
-def get_config() -> Any:
-    """向后兼容的配置获取函数"""
-    # 从 config 模块导入 Config 类
-    from stock_analyzer.config import Config
-
-    return Config.get_instance()
+    return Config.from_env()

@@ -325,7 +325,7 @@ def main() -> int:
     logger.info("=" * 60)
 
     # 验证配置
-    warnings = config.validate()
+    warnings = config.validate_config()
     for warning in warnings:
         logger.warning(warning)
 

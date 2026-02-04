@@ -11,6 +11,8 @@ import threading
 
 from stock_analyzer.bot.commands.base import BotCommand
 from stock_analyzer.bot.models import BotMessage, BotResponse
+from stock_analyzer.market_analyzer import MarketAnalyzer
+from stock_analyzer.search_service import SearchService
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +71,6 @@ class MarketCommand(BotCommand):
             from stock_analyzer.analyzer import GeminiAnalyzer
             from stock_analyzer.config import get_config
             from stock_analyzer.infrastructure.notification import NotificationService
-            from stock_analyzer.market_analyzer import MarketAnalyzer
-            from stock_analyzer.search_service import SearchService
 
             config = get_config()
             notifier = NotificationService(source_message=message)

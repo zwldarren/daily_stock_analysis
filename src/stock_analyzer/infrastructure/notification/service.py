@@ -10,7 +10,7 @@ from typing import Any
 
 from stock_analyzer.analyzer import AnalysisResult
 from stock_analyzer.bot.models import BotMessage
-from stock_analyzer.config import get_settings
+from stock_analyzer.config import get_config
 
 from .base import ChannelDetector, NotificationChannel
 from .channels import EmailChannel, FeishuChannel, TelegramChannel, WechatChannel
@@ -36,7 +36,7 @@ class NotificationService:
         Args:
             source_message: 来源消息（用于上下文回复）
         """
-        self._settings = get_settings()
+        self._settings = get_config()
         self._source_message = source_message
         self._channels: dict[NotificationChannel, Any] = {}
 
