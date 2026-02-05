@@ -22,6 +22,8 @@ from typing import Any
 
 import pandas as pd
 
+from stock_analyzer.utils.stock_code import is_us_code
+
 # 配置日志
 logger = logging.getLogger(__name__)
 
@@ -495,8 +497,6 @@ class DataFetcherManager:
         """
         from stock_analyzer.config import get_config
 
-        from .akshare_fetcher import _is_us_code
-
         config = get_config()
 
         # 如果实时行情功能被禁用，直接返回 None
@@ -505,7 +505,7 @@ class DataFetcherManager:
             return None
 
         # 美股单独处理，使用 YfinanceFetcher
-        if _is_us_code(stock_code):
+        if is_us_code(stock_code):
             for fetcher in self._fetchers:
                 if fetcher.name == "YfinanceFetcher":
                     if hasattr(fetcher, "get_realtime_quote"):

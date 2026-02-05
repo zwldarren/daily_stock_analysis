@@ -8,9 +8,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from stock_analyzer.analyzer import AnalysisResult
-from stock_analyzer.bot.models import BotMessage
+from stock_analyzer.ai.models import AnalysisResult
 from stock_analyzer.config import get_config
+from stock_analyzer.notification.context import MessageContext
 
 from .base import ChannelDetector, NotificationChannel
 from .channels import EmailChannel, FeishuChannel, TelegramChannel, WechatChannel
@@ -27,17 +27,22 @@ class NotificationService:
     1. 生成 Markdown 格式的分析日报
     2. 向所有已配置的渠道推送消息
     3. 支持本地保存日报
+    4. 支持上下文感知回复（通过 MessageContext）
+
+    解耦说明：
+    - 不再直接依赖 BotMessage，而是通过 MessageContext 抽象
+    - 使用 message_adapter.adapt_bot_message() 进行转换
     """
 
-    def __init__(self, source_message: BotMessage | None = None):
+    def __init__(self, context: MessageContext | None = None):
         """
         初始化通知服务
 
         Args:
-            source_message: 来源消息（用于上下文回复）
+            context: 消息上下文（用于上下文回复，可选）
         """
         self._settings = get_config()
-        self._source_message = source_message
+        self._context = context
         self._channels: dict[NotificationChannel, Any] = {}
 
         # 初始化各渠道
@@ -185,7 +190,7 @@ class NotificationService:
             filename = f"report_{date_str}.md"
 
         # 确保 reports 目录存在
-        reports_dir = Path(__file__).parent.parent.parent.parent / "reports"
+        reports_dir = Path(__file__).parent.parent.parent.parent.parent / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
 
         filepath = reports_dir / filename
@@ -254,9 +259,16 @@ class NotificationService:
 
 
 # 便捷函数
-def get_notification_service(source_message: BotMessage | None = None) -> NotificationService:
-    """获取通知服务实例"""
-    return NotificationService(source_message=source_message)
+def get_notification_service(context: MessageContext | None = None) -> NotificationService:
+    """获取通知服务实例
+
+    Args:
+        context: 消息上下文（可选），用于上下文感知回复
+
+    Returns:
+        NotificationService 实例
+    """
+    return NotificationService(context=context)
 
 
 def send_daily_report(results: list[AnalysisResult]) -> bool:

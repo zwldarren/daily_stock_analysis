@@ -225,11 +225,9 @@ class EfinanceFetcher(BaseFetcher):
                 requests.exceptions.ChunkedEncodingError,
             )
         ),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
+        before_sleep=before_sleep_log(logger, logging.WARNING),  # type: ignore[arg-type]
     )
-    def _fetch_raw_data(
-        self, stock_code: str, start_date: str, end_date: str
-    ) -> pd.DataFrame | dict[str, pd.DataFrame]:
+    def _fetch_raw_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
         """
         从 efinance 获取原始数据
 
@@ -255,9 +253,7 @@ class EfinanceFetcher(BaseFetcher):
         else:
             return self._fetch_stock_data(stock_code, start_date, end_date)
 
-    def _fetch_stock_data(
-        self, stock_code: str, start_date: str, end_date: str
-    ) -> pd.DataFrame | dict[str, pd.DataFrame]:
+    def _fetch_stock_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
         """
         获取普通 A 股历史数据
 
@@ -317,6 +313,9 @@ class EfinanceFetcher(BaseFetcher):
             else:
                 logger.warning(f"[API返回] ef.stock.get_quote_history 返回空数据, 耗时 {api_elapsed:.2f}s")
 
+            # Ensure we return a DataFrame (ef.stock.get_quote_history can return dict for multiple stocks)
+            if isinstance(df, dict):
+                raise DataFetchError(f"efinance returned dict instead of DataFrame for {stock_code}")
             return df
 
         except Exception as e:
@@ -649,10 +648,7 @@ class EfinanceFetcher(BaseFetcher):
 
             if df is not None and not df.empty:
                 logger.info(f"[API返回] ef.stock.get_belong_board 成功: 返回 {len(df)} 个板块, 耗时 {api_elapsed:.2f}s")
-                return df
-            else:
-                logger.warning(f"[API返回] 未获取到 {stock_code} 的板块信息")
-                return None
+            return df
 
         except Exception as e:
             logger.error(f"[API错误] 获取 {stock_code} 所属板块失败: {e}")

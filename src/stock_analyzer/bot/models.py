@@ -8,11 +8,11 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class ChatType(str, Enum):
+class ChatType(StrEnum):
     """会话类型"""
 
     GROUP = "group"  # 群聊
@@ -20,7 +20,7 @@ class ChatType(str, Enum):
     UNKNOWN = "unknown"  # 未知
 
 
-class Platform(str, Enum):
+class Platform(StrEnum):
     """平台类型"""
 
     FEISHU = "feishu"  # 飞书

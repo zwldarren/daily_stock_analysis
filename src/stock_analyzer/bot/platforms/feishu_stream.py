@@ -342,7 +342,7 @@ class FeishuStreamHandler:
             create_time = message_data.create_time
             try:
                 timestamp = datetime.fromtimestamp(int(create_time) / 1000) if create_time else datetime.now()
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 timestamp = datetime.now()
 
             # 构建原始数据

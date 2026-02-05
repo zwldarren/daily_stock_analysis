@@ -8,6 +8,10 @@ A股自选股智能分析系统 - 核心分析流水线
 2. 协调数据获取、存储、搜索、分析、通知等模块
 3. 实现并发控制和异常处理
 4. 提供股票分析的核心功能
+
+依赖注入：
+- 支持通过构造函数注入依赖，便于测试和解耦
+- 使用容器获取默认依赖实例
 """
 
 import logging
@@ -16,16 +20,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from typing import Any
 
-from stock_analyzer.analyzer import STOCK_NAME_MAP, AnalysisResult, GeminiAnalyzer
+from stock_analyzer.ai.analyzer import STOCK_NAME_MAP
+from stock_analyzer.ai.models import AnalysisResult
+from stock_analyzer.bot.message_adapter import adapt_bot_message
 from stock_analyzer.bot.models import BotMessage
 from stock_analyzer.config import Config, get_config
-from stock_analyzer.data_provider import DataFetcherManager
 from stock_analyzer.data_provider.realtime_types import ChipDistribution
 from stock_analyzer.enums import ReportType
-from stock_analyzer.infrastructure.notification import NotificationChannel, NotificationService
-from stock_analyzer.search_service import SearchService
-from stock_analyzer.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
-from stock_analyzer.storage import get_db
+from stock_analyzer.notification import NotificationChannel
+from stock_analyzer.stock_analyzer import TrendAnalysisResult
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +41,10 @@ class StockAnalysisPipeline:
     1. 管理整个分析流程
     2. 协调数据获取、存储、搜索、分析、通知等模块
     3. 实现并发控制和异常处理
+
+    依赖注入支持：
+    - 可通过构造函数注入依赖（便于测试）
+    - 未注入的依赖使用容器获取默认实例
     """
 
     def __init__(
@@ -48,6 +55,13 @@ class StockAnalysisPipeline:
         query_id: str | None = None,
         query_source: str | None = None,
         save_context_snapshot: bool | None = None,
+        # 依赖注入参数（可选，用于测试）
+        db=None,
+        fetcher_manager=None,
+        trend_analyzer=None,
+        analyzer=None,
+        notifier=None,
+        search_service=None,
     ):
         """
         初始化调度器
@@ -55,6 +69,16 @@ class StockAnalysisPipeline:
         Args:
             config: 配置对象（可选，默认使用全局配置）
             max_workers: 最大并发线程数（可选，默认从配置读取）
+            source_message: 来源消息（用于上下文回复）
+            query_id: 查询ID
+            query_source: 查询来源
+            save_context_snapshot: 是否保存上下文快照
+            db: 数据库实例（可选，用于依赖注入）
+            fetcher_manager: 数据获取管理器（可选，用于依赖注入）
+            trend_analyzer: 趋势分析器（可选，用于依赖注入）
+            analyzer: AI分析器（可选，用于依赖注入）
+            notifier: 通知服务（可选，用于依赖注入）
+            search_service: 搜索服务（可选，用于依赖注入）
         """
         self.config = config or get_config()
         self.max_workers = max_workers or self.config.max_workers
@@ -65,20 +89,24 @@ class StockAnalysisPipeline:
             self.config.save_context_snapshot if save_context_snapshot is None else save_context_snapshot
         )
 
-        # 初始化各模块
-        self.db = get_db()
-        self.fetcher_manager = DataFetcherManager()
-        # 不再单独创建 akshare_fetcher，统一使用 fetcher_manager 获取增强数据
-        self.trend_analyzer = StockTrendAnalyzer()  # 趋势分析器
-        self.analyzer = GeminiAnalyzer()
-        self.notifier = NotificationService(source_message=source_message)
+        # 使用依赖注入或从容器获取默认实例
+        from stock_analyzer.container import get_container
 
-        # 初始化搜索服务
-        self.search_service = SearchService(
-            bocha_keys=self.config.bocha_api_keys,
-            tavily_keys=self.config.tavily_api_keys,
-            serpapi_keys=self.config.serpapi_keys,
-        )
+        container = get_container()
+
+        self.db = db or container.db()
+        self.fetcher_manager = fetcher_manager or container.fetcher_manager()
+        self.trend_analyzer = trend_analyzer or container.trend_analyzer()
+        self.analyzer = analyzer or container.ai_analyzer()
+        self.search_service = search_service or container.search_service()
+
+        # 通知服务需要上下文，单独处理
+        if notifier is not None:
+            self.notifier = notifier
+        else:
+            # 使用适配器将 BotMessage 转换为 MessageContext
+            message_context = adapt_bot_message(source_message)
+            self.notifier = container.notification_service(context=message_context)
 
         logger.info(f"调度器初始化完成，最大并发数: {self.max_workers}")
         logger.info("已启用趋势分析器 (MA5>MA10>MA20 多头判断)")

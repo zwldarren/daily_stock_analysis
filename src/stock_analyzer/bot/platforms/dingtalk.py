@@ -155,7 +155,7 @@ class DingtalkPlatform(BotPlatform):
         create_at = data.get("createAt", "")
         try:
             timestamp = datetime.fromtimestamp(int(create_at) / 1000)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             timestamp = datetime.now()
 
         # 保存 session webhook 用于回复

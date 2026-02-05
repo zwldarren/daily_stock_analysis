@@ -389,6 +389,32 @@ class DatabaseManager:
 
             return list(results)
 
+    def get_daily_data(self, code: str, days: int = 30) -> pd.DataFrame | None:
+        """
+        获取最近 N 天的日线数据
+
+        Args:
+            code: 股票代码
+            days: 获取天数（默认30天）
+
+        Returns:
+            DataFrame 包含日线数据，或 None 如果没有数据
+        """
+        records = self.get_latest_data(code, days)
+
+        if not records:
+            return None
+
+        # 转换为 DataFrame
+        data = [record.to_dict() for record in records]
+        df = pd.DataFrame(data)
+
+        # 按日期升序排列（从旧到新）
+        if "date" in df.columns:
+            df = df.sort_values("date").reset_index(drop=True)
+
+        return df
+
     def save_news_intel(
         self,
         code: str,

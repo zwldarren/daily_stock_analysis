@@ -85,7 +85,7 @@ def review_with_gemini(prompt):
     print(f"🤖 使用模型: {model}")
 
     try:
-        from google import genai  # type: ignore[import-not-found]
+        from google import genai
 
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(model=model, contents=prompt)

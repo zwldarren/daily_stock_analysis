@@ -64,11 +64,11 @@ def safe_float(val: Any, default: float | None = None) -> float | None:
         try:
             if math.isnan(float(val)):
                 return default
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass
 
         return float(val)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return default
 
 

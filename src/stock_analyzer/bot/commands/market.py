@@ -69,11 +69,13 @@ class MarketCommand(BotCommand):
         """后台执行大盘复盘"""
         try:
             from stock_analyzer.analyzer import GeminiAnalyzer
+            from stock_analyzer.bot.message_adapter import adapt_bot_message
             from stock_analyzer.config import get_config
-            from stock_analyzer.infrastructure.notification import NotificationService
+            from stock_analyzer.notification import NotificationService
 
             config = get_config()
-            notifier = NotificationService(source_message=message)
+            message_context = adapt_bot_message(message)
+            notifier = NotificationService(context=message_context)
 
             # 初始化搜索服务
             search_service = None

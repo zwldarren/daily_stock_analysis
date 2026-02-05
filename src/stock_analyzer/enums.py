@@ -6,10 +6,10 @@
 集中管理系统中使用的枚举类型，提供类型安全和代码可读性。
 """
 
-from enum import Enum
+from enum import StrEnum
 
 
-class ReportType(str, Enum):
+class ReportType(StrEnum):
     """
     报告类型枚举
 
@@ -33,7 +33,7 @@ class ReportType(str, Enum):
         """
         try:
             return cls(value.lower().strip())
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             return cls.SIMPLE
 
     @property
