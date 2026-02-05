@@ -12,7 +12,7 @@ A股自选股智能分析系统 - 分析服务层
 
 import uuid
 
-from stock_analyzer.analyzer import AnalysisResult
+from stock_analyzer.ai.models import AnalysisResult
 from stock_analyzer.config import Config, get_config
 from stock_analyzer.core.market_review import run_market_review
 from stock_analyzer.core.pipeline import StockAnalysisPipeline

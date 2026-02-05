@@ -22,7 +22,6 @@ A股自选股智能分析系统 - 主调度程序
 """
 
 import argparse
-import logging
 import os
 import sys
 import time
@@ -39,22 +38,16 @@ if os.getenv("GITHUB_ACTIONS") != "true" and os.getenv("USE_PROXY", "false").low
     os.environ["http_proxy"] = proxy_url
     os.environ["https_proxy"] = proxy_url
 
-from stock_analyzer.notification import NotificationService
+from loguru import logger
 
-from .analyzer import GeminiAnalyzer
+from .ai.analyzer import GeminiAnalyzer
 from .config import Config, get_config
 from .core.market_review import run_market_review
 from .core.pipeline import StockAnalysisPipeline
 from .feishu_doc import FeishuDocManager
+from .notification import NotificationService
 from .search_service import SearchService
 from .utils.logging_config import setup_logging
-
-# 配置日志格式
-LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s"
-LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
-
-
-logger = logging.getLogger(__name__)
 
 
 def parse_arguments() -> argparse.Namespace:

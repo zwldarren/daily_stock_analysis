@@ -7,7 +7,7 @@
 import logging
 from datetime import datetime
 
-from stock_analyzer.analyzer import AnalysisResult
+from stock_analyzer.ai.models import AnalysisResult
 
 logger = logging.getLogger(__name__)
 

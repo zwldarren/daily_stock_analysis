@@ -4,7 +4,7 @@
 提供便捷的消息构建方法
 """
 
-from stock_analyzer.analyzer import AnalysisResult
+from stock_analyzer.ai.models import AnalysisResult
 
 
 class NotificationBuilder:

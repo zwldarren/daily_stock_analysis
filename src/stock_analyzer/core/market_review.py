@@ -12,7 +12,7 @@ A股自选股智能分析系统 - 大盘复盘模块
 import logging
 from datetime import datetime
 
-from stock_analyzer.analyzer import GeminiAnalyzer
+from stock_analyzer.ai.analyzer import GeminiAnalyzer
 from stock_analyzer.market_analyzer import MarketAnalyzer
 from stock_analyzer.notification import NotificationService
 from stock_analyzer.search_service import SearchService

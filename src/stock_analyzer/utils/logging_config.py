@@ -1,19 +1,24 @@
 """日志配置模块"""
 
-import logging
 import sys
 from datetime import datetime
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s"
-LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+from loguru import logger
 
 
-def setup_logging(debug: bool = False, log_dir: str = "./logs") -> None:
-    """配置日志系统"""
-    level = logging.DEBUG if debug else logging.INFO
+def setup_logging(
+    debug: bool = False,
+    log_dir: str = "./logs",
+    json_format: bool = False,
+) -> None:
+    """配置 Loguru 日志系统
 
+    Args:
+        debug: 是否启用调试模式
+        log_dir: 日志文件保存目录
+        json_format: 是否使用 JSON 格式（便于日志收集系统解析）
+    """
     log_path = Path(log_dir)
     log_path.mkdir(parents=True, exist_ok=True)
 
@@ -21,33 +26,116 @@ def setup_logging(debug: bool = False, log_dir: str = "./logs") -> None:
     log_file = log_path / f"stock_analysis_{today_str}.log"
     debug_log_file = log_path / f"stock_analysis_debug_{today_str}.log"
 
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    # 移除默认的 stderr handler
+    logger.remove()
 
-    # 控制台 Handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(level)
-    console_handler.setFormatter(logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT))
-    root_logger.addHandler(console_handler)
+    # 控制台 Handler - 彩色输出
+    console_level = "DEBUG" if debug else "INFO"
+    console_format = (
+        "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+        "<level>{level: <8}</level> | "
+        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+        "<level>{message}</level>"
+    )
+    logger.add(
+        sys.stdout,
+        level=console_level,
+        format=console_format,
+        colorize=True,
+        enqueue=True,
+    )
 
-    # 文件 Handler
-    file_handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8")
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT))
-    root_logger.addHandler(file_handler)
+    # 常规日志文件 - INFO 级别及以上
+    if json_format:
+        file_format = "{extra[json]}"
+    else:
+        file_format = "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} | {message}"
 
-    # 调试 Handler
-    debug_handler = RotatingFileHandler(debug_log_file, maxBytes=50 * 1024 * 1024, backupCount=3, encoding="utf-8")
-    debug_handler.setLevel(logging.DEBUG)
-    debug_handler.setFormatter(logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT))
-    root_logger.addHandler(debug_handler)
+    logger.add(
+        str(log_file),
+        level="INFO",
+        format=file_format,
+        rotation="00:00",  # 每天午夜轮转
+        retention="30 days",  # 保留30天
+        encoding="utf-8",
+        enqueue=True,
+        delay=True,  # 延迟打开文件
+    )
+
+    # 调试日志文件 - DEBUG 级别及以上
+    logger.add(
+        str(debug_log_file),
+        level="DEBUG",
+        format=file_format,
+        rotation="00:00",
+        retention="7 days",  # 调试日志保留7天
+        encoding="utf-8",
+        enqueue=True,
+        delay=True,
+    )
+
+    # 拦截标准库的 logging，使其输出到 loguru
+    _intercept_standard_logging()
 
     # 降低第三方库日志级别
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
-    logging.getLogger("google").setLevel(logging.WARNING)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    _suppress_noisy_loggers()
 
-    logging.info(f"日志系统初始化完成，日志目录: {log_path.absolute()}")
-    logging.info(f"常规日志: {log_file}")
-    logging.info(f"调试日志: {debug_log_file}")
+    logger.info(f"日志系统初始化完成，日志目录: {log_path.absolute()}")
+    logger.info(f"常规日志: {log_file}")
+    logger.info(f"调试日志: {debug_log_file}")
+
+
+def _intercept_standard_logging() -> None:
+    """拦截 Python 标准库的 logging，重定向到 loguru"""
+    import logging
+
+    class InterceptHandler(logging.Handler):
+        """将标准库日志转发到 loguru"""
+
+        def emit(self, record: logging.LogRecord) -> None:
+            try:
+                level = logger.level(record.levelname).name
+            except ValueError:
+                level = record.levelno
+
+            frame, depth = sys._getframe(6), 6
+            while frame and frame.f_code.co_filename == logging.__file__:
+                frame = frame.f_back
+                depth += 1
+
+            logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
+
+    # 配置根 logger 使用拦截 handler
+    logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+
+    # 替换所有现有 logger 的 handlers
+    for name in logging.root.manager.loggerDict:
+        logging_logger = logging.getLogger(name)
+        logging_logger.handlers = [InterceptHandler()]
+        logging_logger.propagate = False
+
+
+def _suppress_noisy_loggers() -> None:
+    """降低嘈杂的第三方库日志级别"""
+    import logging
+
+    noisy_loggers = [
+        "urllib3",
+        "urllib3.connectionpool",
+        "sqlalchemy",
+        "sqlalchemy.engine",
+        "google",
+        "google.auth",
+        "httpx",
+        "httpx._client",
+        "httpcore",
+        "httpcore.connection",
+        "asyncio",
+        "discord",
+        "discord.client",
+        "websockets",
+        "websockets.client",
+    ]
+
+    for name in noisy_loggers:
+        logging.getLogger(name).setLevel(logging.WARNING)
