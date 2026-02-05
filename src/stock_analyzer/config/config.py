@@ -87,6 +87,7 @@ class Config(BaseModel):
     pushover_user_key: str | None = None
     pushover_api_token: str | None = None
     pushplus_token: str | None = None
+    serverchan3_sendkey: str | None = None
     custom_webhook_urls: list[str] = Field(default_factory=list)
     custom_webhook_bearer_token: str | None = None
     discord_bot_token: str | None = None
@@ -183,6 +184,7 @@ class Config(BaseModel):
             pushover_user_key=os.getenv("PUSHOVER_USER_KEY"),
             pushover_api_token=os.getenv("PUSHOVER_API_TOKEN"),
             pushplus_token=os.getenv("PUSHPLUS_TOKEN"),
+            serverchan3_sendkey=os.getenv("SERVERCHAN3_SENDKEY"),
             custom_webhook_urls=parse_list(os.getenv("CUSTOM_WEBHOOK_URLS")),
             custom_webhook_bearer_token=os.getenv("CUSTOM_WEBHOOK_BEARER_TOKEN"),
             discord_bot_token=os.getenv("DISCORD_BOT_TOKEN"),

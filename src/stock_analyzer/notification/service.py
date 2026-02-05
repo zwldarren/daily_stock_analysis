@@ -13,7 +13,7 @@ from stock_analyzer.config import get_config
 from stock_analyzer.notification.context import MessageContext
 
 from .base import ChannelDetector, NotificationChannel
-from .channels import EmailChannel, FeishuChannel, TelegramChannel, WechatChannel
+from .channels import EmailChannel, FeishuChannel, Serverchan3Channel, TelegramChannel, WechatChannel
 from .report_generator import ReportGenerator
 
 logger = logging.getLogger(__name__)
@@ -100,6 +100,14 @@ class NotificationService:
                     "sender": settings.email_sender,
                     "password": settings.email_password,
                     "receivers": receivers,
+                }
+            )
+
+        # Server酱3
+        if settings.serverchan3_sendkey:
+            self._channels[NotificationChannel.SERVERCHAN3] = Serverchan3Channel(
+                {
+                    "sendkey": settings.serverchan3_sendkey,
                 }
             )
 
@@ -256,6 +264,10 @@ class NotificationService:
     def send_to_astrbot(self, content: str) -> bool:
         """发送到 AstrBot"""
         return self._send_to_channel(NotificationChannel.ASTRBOT, content)
+
+    def send_to_serverchan3(self, content: str) -> bool:
+        """发送到 Server酱3"""
+        return self._send_to_channel(NotificationChannel.SERVERCHAN3, content)
 
 
 # 便捷函数

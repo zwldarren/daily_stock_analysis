@@ -19,6 +19,7 @@ class NotificationChannel(Enum):
     EMAIL = "email"  # 邮件
     PUSHOVER = "pushover"  # Pushover（手机/桌面推送）
     PUSHPLUS = "pushplus"  # PushPlus（国内推送服务）
+    SERVERCHAN3 = "serverchan3"  # Server酱3（手机APP推送服务）
     CUSTOM = "custom"  # 自定义 Webhook
     DISCORD = "discord"  # Discord 机器人 (Bot)
     ASTRBOT = "astrbot"  # AstrBot
@@ -38,6 +39,7 @@ class ChannelDetector:
             NotificationChannel.EMAIL: "邮件",
             NotificationChannel.PUSHOVER: "Pushover",
             NotificationChannel.PUSHPLUS: "PushPlus",
+            NotificationChannel.SERVERCHAN3: "Server酱3",
             NotificationChannel.CUSTOM: "自定义Webhook",
             NotificationChannel.DISCORD: "Discord机器人",
             NotificationChannel.ASTRBOT: "AstrBot",
