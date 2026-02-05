@@ -73,7 +73,7 @@ class FeishuReplyClient:
 
         # 获取配置的最大字节数
         config = get_config()
-        self._max_bytes = getattr(config, "feishu_max_bytes", 20000)
+        self._max_bytes = getattr(config.notification_message, "feishu_max_bytes", 20000)
 
     def _send_interactive_card(
         self,
@@ -434,8 +434,8 @@ class FeishuStreamClient:
 
         config = get_config()
 
-        self._app_id = app_id or getattr(config, "feishu_app_id", None)
-        self._app_secret = app_secret or getattr(config, "feishu_app_secret", None)
+        self._app_id = app_id or getattr(config.feishu_doc, "feishu_app_id", None)
+        self._app_secret = app_secret or getattr(config.feishu_doc, "feishu_app_secret", None)
 
         if not self._app_id or not self._app_secret:
             raise ValueError("飞书 Stream 模式需要配置 FEISHU_APP_ID 和 FEISHU_APP_SECRET")
@@ -472,8 +472,8 @@ class FeishuStreamClient:
         # 但 SDK 要求传入（可以为空字符串）
         config = get_config()
 
-        encrypt_key = getattr(config, "feishu_encrypt_key", "") or ""
-        verification_token = getattr(config, "feishu_verification_token", "") or ""
+        encrypt_key = getattr(config.feishu_bot, "feishu_encrypt_key", "") or ""
+        verification_token = getattr(config.feishu_bot, "feishu_verification_token", "") or ""
 
         event_handler = (
             lark.EventDispatcherHandler.builder(

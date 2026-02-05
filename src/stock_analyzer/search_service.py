@@ -1181,9 +1181,9 @@ def get_search_service() -> SearchService:
         config = get_config()
 
         _search_service = SearchService(
-            bocha_keys=config.bocha_api_keys,
-            tavily_keys=config.tavily_api_keys,
-            serpapi_keys=config.serpapi_keys,
+            bocha_keys=config.search.bocha_api_keys,
+            tavily_keys=config.search.tavily_api_keys,
+            serpapi_keys=config.search.serpapi_keys,
         )
 
     return _search_service

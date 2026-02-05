@@ -26,9 +26,9 @@ class FeishuDocManager:
 
     def __init__(self):
         self.config = get_config()
-        self.app_id = self.config.feishu_app_id
-        self.app_secret = self.config.feishu_app_secret
-        self.folder_token = self.config.feishu_folder_token
+        self.app_id = self.config.feishu_doc.feishu_app_id
+        self.app_secret = self.config.feishu_doc.feishu_app_secret
+        self.folder_token = self.config.feishu_doc.feishu_folder_token
 
         # 初始化 SDK 客户端
         # SDK 会自动处理 tenant_access_token 的获取和刷新，无需人工干预

@@ -60,54 +60,56 @@ class NotificationService:
     def _init_channels(self) -> None:
         """初始化各通知渠道"""
         settings = self._settings
+        nc = settings.notification_channel
+        nm = settings.notification_message
 
         # 企业微信
-        if settings.wechat_webhook_url:
+        if nc.wechat_webhook_url:
             self._channels[NotificationChannel.WECHAT] = WechatChannel(
                 {
-                    "webhook_url": settings.wechat_webhook_url,
-                    "msg_type": getattr(settings, "wechat_msg_type", "markdown"),
-                    "max_bytes": getattr(settings, "wechat_max_bytes", 4000),
+                    "webhook_url": nc.wechat_webhook_url,
+                    "msg_type": nm.wechat_msg_type,
+                    "max_bytes": nm.wechat_max_bytes,
                 }
             )
 
         # 飞书
-        if settings.feishu_webhook_url:
+        if nc.feishu_webhook_url:
             self._channels[NotificationChannel.FEISHU] = FeishuChannel(
                 {
-                    "webhook_url": settings.feishu_webhook_url,
-                    "max_bytes": getattr(settings, "feishu_max_bytes", 20000),
+                    "webhook_url": nc.feishu_webhook_url,
+                    "max_bytes": nm.feishu_max_bytes,
                 }
             )
 
         # Telegram
-        if settings.telegram_bot_token and settings.telegram_chat_id:
+        if nc.telegram_bot_token and nc.telegram_chat_id:
             self._channels[NotificationChannel.TELEGRAM] = TelegramChannel(
                 {
-                    "bot_token": settings.telegram_bot_token,
-                    "chat_id": settings.telegram_chat_id,
-                    "message_thread_id": getattr(settings, "telegram_message_thread_id", None),
+                    "bot_token": nc.telegram_bot_token,
+                    "chat_id": nc.telegram_chat_id,
+                    "message_thread_id": nc.telegram_message_thread_id,
                 }
             )
 
         # 邮件
-        if settings.email_sender and settings.email_password:
-            receivers = getattr(settings, "email_receivers", [])
+        if nc.email_sender and nc.email_password:
+            receivers = nc.email_receivers or []
             if not receivers:
-                receivers = [settings.email_sender]
+                receivers = [nc.email_sender]
             self._channels[NotificationChannel.EMAIL] = EmailChannel(
                 {
-                    "sender": settings.email_sender,
-                    "password": settings.email_password,
+                    "sender": nc.email_sender,
+                    "password": nc.email_password,
                     "receivers": receivers,
                 }
             )
 
         # Server酱3
-        if settings.serverchan3_sendkey:
+        if nc.serverchan3_sendkey:
             self._channels[NotificationChannel.SERVERCHAN3] = Serverchan3Channel(
                 {
-                    "sendkey": settings.serverchan3_sendkey,
+                    "sendkey": nc.serverchan3_sendkey,
                 }
             )
 

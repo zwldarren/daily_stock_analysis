@@ -94,7 +94,7 @@ class TushareFetcher(BaseFetcher):
         """
         config = get_config()
 
-        if not config.tushare_token:
+        if not config.datasource.tushare_token:
             logger.warning("Tushare Token 未配置，此数据源不可用")
             return
 
@@ -102,7 +102,7 @@ class TushareFetcher(BaseFetcher):
             import tushare as ts
 
             # 设置 Token
-            ts.set_token(config.tushare_token)
+            ts.set_token(config.datasource.tushare_token)
 
             # 获取 API 实例
             self._api = ts.pro_api()
@@ -126,7 +126,7 @@ class TushareFetcher(BaseFetcher):
         """
         config = get_config()
 
-        if config.tushare_token and self._api is not None:
+        if config.datasource.tushare_token and self._api is not None:
             # Token 配置且 API 初始化成功，提升为最高优先级
             logger.info("✅ 检测到 TUSHARE_TOKEN 且 API 初始化成功，Tushare 数据源优先级提升为最高 (Priority -1)")
             return -1

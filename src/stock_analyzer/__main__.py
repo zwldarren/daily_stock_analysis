@@ -104,7 +104,7 @@ def run_full_analysis(config: Config, args: argparse.Namespace, stock_codes: lis
     try:
         # 命令行参数 --single-notify 覆盖配置（#55）
         if getattr(args, "single_notify", False):
-            config.single_stock_notify = True
+            config.notification_message.single_stock_notify = True
 
         # 创建调度器
         save_context_snapshot = None
@@ -123,14 +123,14 @@ def run_full_analysis(config: Config, args: argparse.Namespace, stock_codes: lis
         results = pipeline.run(stock_codes=stock_codes, dry_run=args.dry_run, send_notification=not args.no_notify)
 
         # Issue #128: 分析间隔 - 在个股分析和大盘分析之间添加延迟
-        analysis_delay = getattr(config, "analysis_delay", 0)
-        if analysis_delay > 0 and config.market_review_enabled and not args.no_market_review:
+        analysis_delay = getattr(config.schedule, "analysis_delay", 0)
+        if analysis_delay > 0 and config.schedule.market_review_enabled and not args.no_market_review:
             logger.info(f"等待 {analysis_delay} 秒后执行大盘复盘（避免API限流）...")
             time.sleep(analysis_delay)
 
         # 2. 运行大盘复盘（如果启用且不是仅个股模式）
         market_report = ""
-        if config.market_review_enabled and not args.no_market_review:
+        if config.schedule.market_review_enabled and not args.no_market_review:
             # 只调用一次，并获取结果
             review_result = run_market_review(
                 notifier=pipeline.notifier,
@@ -195,7 +195,7 @@ def run_full_analysis(config: Config, args: argparse.Namespace, stock_codes: lis
 def start_bot_stream_clients(config: Config) -> None:
     """Start bot stream clients when enabled in config."""
     # 启动钉钉 Stream 客户端
-    if config.dingtalk_stream_enabled:
+    if config.dingtalk_bot.dingtalk_stream_enabled:
         try:
             from stock_analyzer.bot.platforms import (
                 DINGTALK_STREAM_AVAILABLE,
@@ -214,7 +214,7 @@ def start_bot_stream_clients(config: Config) -> None:
             logger.error(f"[Main] Failed to start Dingtalk Stream client: {exc}")
 
     # 启动飞书 Stream 客户端
-    if getattr(config, "feishu_stream_enabled", False):
+    if getattr(config.feishu_bot, "feishu_stream_enabled", False):
         try:
             from stock_analyzer.bot.platforms import (
                 FEISHU_SDK_AVAILABLE,
@@ -247,7 +247,7 @@ def main() -> int:
     config = get_config()
 
     # 配置日志（输出到控制台和文件）
-    setup_logging(debug=args.debug, log_dir=config.log_dir)
+    setup_logging(debug=args.debug, log_dir=config.logging.log_dir)
 
     logger.info("=" * 60)
     logger.info("A股自选股智能分析系统 启动")
@@ -275,15 +275,15 @@ def main() -> int:
             search_service = None
             analyzer = None
 
-            if config.bocha_api_keys or config.tavily_api_keys or config.serpapi_keys:
+            if config.search.bocha_api_keys or config.search.tavily_api_keys or config.search.serpapi_keys:
                 search_service = SearchService(
-                    bocha_keys=config.bocha_api_keys,
-                    tavily_keys=config.tavily_api_keys,
-                    serpapi_keys=config.serpapi_keys,
+                    bocha_keys=config.search.bocha_api_keys,
+                    tavily_keys=config.search.tavily_api_keys,
+                    serpapi_keys=config.search.serpapi_keys,
                 )
 
-            if config.gemini_api_key or config.openai_api_key:
-                analyzer = GeminiAnalyzer(api_key=config.gemini_api_key)
+            if config.ai.gemini_api_key or config.ai.openai_api_key:
+                analyzer = GeminiAnalyzer(api_key=config.ai.gemini_api_key)
                 if not analyzer.is_available():
                     logger.warning("AI 分析器初始化后不可用，请检查 API Key 配置")
                     analyzer = None
@@ -299,9 +299,9 @@ def main() -> int:
             return 0
 
         # 模式2: 定时任务模式
-        if args.schedule or config.schedule_enabled:
+        if args.schedule or config.schedule.schedule_enabled:
             logger.info("模式: 定时任务")
-            logger.info(f"每日执行时间: {config.schedule_time}")
+            logger.info(f"每日执行时间: {config.schedule.schedule_time}")
 
             from stock_analyzer.scheduler import run_with_schedule
 
@@ -310,7 +310,7 @@ def main() -> int:
 
             run_with_schedule(
                 task=scheduled_task,
-                schedule_time=config.schedule_time,
+                schedule_time=config.schedule.schedule_time,
                 run_immediately=True,  # 启动时先执行一次
             )
             return 0

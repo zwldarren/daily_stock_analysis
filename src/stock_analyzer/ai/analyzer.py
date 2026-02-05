@@ -342,7 +342,7 @@ class GeminiAnalyzer:
             api_key: Gemini API Key（可选，默认从配置读取）
         """
         config = get_config()
-        self._api_key = api_key or config.gemini_api_key
+        self._api_key = api_key or config.ai.gemini_api_key
         self._model = None
         self._current_model_name = None  # 当前使用的模型名称
         self._using_fallback = False  # 是否正在使用备选模型
@@ -382,7 +382,9 @@ class GeminiAnalyzer:
 
         # 检查 OpenAI API Key 是否有效（过滤占位符）
         openai_key_valid = (
-            config.openai_api_key and not config.openai_api_key.startswith("your_") and len(config.openai_api_key) > 10
+            config.ai.openai_api_key
+            and not config.ai.openai_api_key.startswith("your_")
+            and len(config.ai.openai_api_key) > 10
         )
 
         if not openai_key_valid:
@@ -399,15 +401,15 @@ class GeminiAnalyzer:
         try:
             # base_url 可选，不填则使用 OpenAI 官方默认地址
             # Note: api_key is guaranteed to be non-None by the caller
-            client_kwargs: dict[str, Any] = {"api_key": config.openai_api_key or ""}
-            if config.openai_base_url and config.openai_base_url.startswith("http"):
-                client_kwargs["base_url"] = config.openai_base_url
+            client_kwargs: dict[str, Any] = {"api_key": config.ai.openai_api_key or ""}
+            if config.ai.openai_base_url and config.ai.openai_base_url.startswith("http"):
+                client_kwargs["base_url"] = config.ai.openai_base_url
 
             self._openai_client = OpenAI(**client_kwargs)
-            self._current_model_name = config.openai_model
+            self._current_model_name = config.ai.openai_model
             self._use_openai = True
             logger.info(
-                f"OpenAI 兼容 API 初始化成功 (base_url: {config.openai_base_url}, model: {config.openai_model})"
+                f"OpenAI 兼容 API 初始化成功 (base_url: {config.ai.openai_base_url}, model: {config.ai.openai_model})"
             )
         except ImportError as e:
             # 依赖缺失（如 socksio）
@@ -438,8 +440,8 @@ class GeminiAnalyzer:
 
             # 从配置获取模型名称
             config = get_config()
-            model_name = config.gemini_model
-            fallback_model = config.gemini_model_fallback
+            model_name = config.ai.gemini_model
+            fallback_model = config.ai.gemini_model_fallback
 
             # 不再使用 Google Search Grounding（已知有兼容性问题）
             # 改为使用外部搜索服务（Tavily/SerpAPI）预先获取新闻
@@ -493,7 +495,7 @@ class GeminiAnalyzer:
             from google.genai import types
 
             config = get_config()
-            fallback_model = config.gemini_model_fallback
+            fallback_model = config.ai.gemini_model_fallback
 
             # Ensure genai_client is initialized
             if not getattr(self, "_genai_client", None):
@@ -538,8 +540,8 @@ class GeminiAnalyzer:
             响应文本
         """
         config = get_config()
-        max_retries = config.gemini_max_retries
-        base_delay = config.gemini_retry_delay
+        max_retries = config.ai.gemini_max_retries
+        base_delay = config.ai.gemini_retry_delay
 
         # Assert _openai_client is not None since we're in the OpenAI code path
         assert self._openai_client is not None, "OpenAI client is not initialized"
@@ -561,7 +563,7 @@ class GeminiAnalyzer:
                         {"role": "system", "content": self.SYSTEM_PROMPT},
                         {"role": "user", "content": prompt},
                     ],
-                    temperature=generation_config.get("temperature", config.openai_temperature),
+                    temperature=generation_config.get("temperature", config.ai.openai_temperature),
                     max_tokens=generation_config.get("max_output_tokens", 8192),
                 )
 
@@ -609,8 +611,8 @@ class GeminiAnalyzer:
             return self._call_openai_api(prompt, generation_config)
 
         config = get_config()
-        max_retries = config.gemini_max_retries
-        base_delay = config.gemini_retry_delay
+        max_retries = config.ai.gemini_max_retries
+        base_delay = config.ai.gemini_retry_delay
 
         last_error = None
         tried_fallback = getattr(self, "_using_fallback", False)
@@ -681,7 +683,7 @@ class GeminiAnalyzer:
             except Exception as openai_error:
                 logger.error(f"[OpenAI] 备选 API 也失败: {openai_error}")
                 raise last_error or openai_error from None
-        elif config.openai_api_key and config.openai_base_url:
+        elif config.ai.openai_api_key and config.ai.openai_base_url:
             # 尝试懒加载初始化 OpenAI
             logger.warning("[Gemini] 所有重试失败，尝试初始化 OpenAI 兼容 API")
             self._init_openai_fallback()
@@ -716,7 +718,7 @@ class GeminiAnalyzer:
         config = get_config()
 
         # 请求前增加延时（防止连续请求触发限流）
-        request_delay = config.gemini_request_delay
+        request_delay = config.ai.gemini_request_delay
         if request_delay > 0:
             logger.debug(f"[LLM] 请求前等待 {request_delay:.1f} 秒...")
             time.sleep(request_delay)
@@ -766,7 +768,7 @@ class GeminiAnalyzer:
             # 设置生成配置（从配置文件读取温度参数）
             config = get_config()
             generation_config = {
-                "temperature": config.gemini_temperature,
+                "temperature": config.ai.gemini_temperature,
                 "max_output_tokens": 8192,
             }
 

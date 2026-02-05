@@ -216,8 +216,8 @@ class DingtalkStreamClient:
 
         config = get_config()
 
-        self._client_id = client_id or getattr(config, "dingtalk_app_key", None)
-        self._client_secret = client_secret or getattr(config, "dingtalk_app_secret", None)
+        self._client_id = client_id or getattr(config.dingtalk_bot, "dingtalk_app_key", None)
+        self._client_secret = client_secret or getattr(config.dingtalk_bot, "dingtalk_app_secret", None)
 
         if not self._client_id or not self._client_secret:
             raise ValueError("钉钉 Stream 模式需要配置 DINGTALK_APP_KEY 和 DINGTALK_APP_SECRET")

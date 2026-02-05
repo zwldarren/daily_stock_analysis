@@ -428,14 +428,14 @@ class DataFetcherManager:
         config = get_config()
 
         # 如果实时行情被禁用，跳过预取
-        if not config.enable_realtime_quote:
+        if not config.realtime_quote.enable_realtime_quote:
             logger.debug("[预取] 实时行情功能已禁用，跳过预取")
             return 0
 
         # 检查优先级中是否包含全量拉取数据源
         # 注意：新增全量接口（如 tushare_realtime）时需同步更新此列表
         # 全量接口特征：一次 API 调用拉取全市场 5000+ 股票数据
-        priority = config.realtime_source_priority.lower()
+        priority = config.realtime_quote.realtime_source_priority.lower()
         bulk_sources = ["efinance", "akshare_em", "tushare"]  # 全量接口列表
 
         # 如果优先级中前两个都不是全量数据源，跳过预取
@@ -500,7 +500,7 @@ class DataFetcherManager:
         config = get_config()
 
         # 如果实时行情功能被禁用，直接返回 None
-        if not config.enable_realtime_quote:
+        if not config.realtime_quote.enable_realtime_quote:
             logger.debug(f"[实时行情] 功能已禁用，跳过 {stock_code}")
             return None
 
@@ -521,7 +521,7 @@ class DataFetcherManager:
             return None
 
         # 获取配置的数据源优先级
-        source_priority = config.realtime_source_priority.split(",")
+        source_priority = config.realtime_quote.realtime_source_priority.split(",")
 
         errors = []
 
@@ -612,7 +612,7 @@ class DataFetcherManager:
         config = get_config()
 
         # 如果筹码分布功能被禁用，直接返回 None
-        if not config.enable_chip_distribution:
+        if not config.realtime_quote.enable_chip_distribution:
             logger.debug(f"[筹码分布] 功能已禁用，跳过 {stock_code}")
             return None
 

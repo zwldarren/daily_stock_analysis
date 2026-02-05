@@ -32,9 +32,9 @@ class Container(containers.DeclarativeContainer):
     ai_analyzer = providers.Singleton(GeminiAnalyzer)
     search_service = providers.Singleton(
         SearchService,
-        bocha_keys=config.provided.bocha_api_keys,
-        tavily_keys=config.provided.tavily_api_keys,
-        serpapi_keys=config.provided.serpapi_keys,
+        bocha_keys=config.provided.search.bocha_api_keys,
+        tavily_keys=config.provided.search.tavily_api_keys,
+        serpapi_keys=config.provided.search.serpapi_keys,
     )
 
     # 通知层 - 使用Factory因为可能需要不同的上下文

@@ -42,8 +42,8 @@ class DingtalkPlatform(BotPlatform):
 
         config = get_config()
 
-        self._app_key = getattr(config, "dingtalk_app_key", None)
-        self._app_secret = getattr(config, "dingtalk_app_secret", None)
+        self._app_key = getattr(config.dingtalk_bot, "dingtalk_app_key", None)
+        self._app_secret = getattr(config.dingtalk_bot, "dingtalk_app_secret", None)
 
     @property
     def platform_name(self) -> str:

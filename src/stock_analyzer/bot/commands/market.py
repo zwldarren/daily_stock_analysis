@@ -79,16 +79,16 @@ class MarketCommand(BotCommand):
 
             # 初始化搜索服务
             search_service = None
-            if config.bocha_api_keys or config.tavily_api_keys or config.serpapi_keys:
+            if config.search.bocha_api_keys or config.search.tavily_api_keys or config.search.serpapi_keys:
                 search_service = SearchService(
-                    bocha_keys=config.bocha_api_keys,
-                    tavily_keys=config.tavily_api_keys,
-                    serpapi_keys=config.serpapi_keys,
+                    bocha_keys=config.search.bocha_api_keys,
+                    tavily_keys=config.search.tavily_api_keys,
+                    serpapi_keys=config.search.serpapi_keys,
                 )
 
             # 初始化 AI 分析器
             analyzer = None
-            if config.gemini_api_key or config.openai_api_key:
+            if config.ai.gemini_api_key or config.ai.openai_api_key:
                 analyzer = GeminiAnalyzer()
 
             # 执行复盘

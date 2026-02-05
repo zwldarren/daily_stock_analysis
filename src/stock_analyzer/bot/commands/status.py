@@ -65,19 +65,23 @@ class StatusCommand(BotCommand):
         }
 
         # AI 配置状态
-        status["ai_gemini"] = bool(config.gemini_api_key)
-        status["ai_openai"] = bool(config.openai_api_key)
+        status["ai_gemini"] = bool(config.ai.gemini_api_key)
+        status["ai_openai"] = bool(config.ai.openai_api_key)
 
         # 搜索服务状态
-        status["search_bocha"] = len(config.bocha_api_keys) > 0
-        status["search_tavily"] = len(config.tavily_api_keys) > 0
-        status["search_serpapi"] = len(config.serpapi_keys) > 0
+        status["search_bocha"] = len(config.search.bocha_api_keys) > 0
+        status["search_tavily"] = len(config.search.tavily_api_keys) > 0
+        status["search_serpapi"] = len(config.search.serpapi_keys) > 0
 
         # 通知渠道状态
-        status["notify_wechat"] = bool(config.wechat_webhook_url)
-        status["notify_feishu"] = bool(config.feishu_webhook_url)
-        status["notify_telegram"] = bool(config.telegram_bot_token and config.telegram_chat_id)
-        status["notify_email"] = bool(config.email_sender and config.email_password)
+        status["notify_wechat"] = bool(config.notification_channel.wechat_webhook_url)
+        status["notify_feishu"] = bool(config.notification_channel.feishu_webhook_url)
+        status["notify_telegram"] = bool(
+            config.notification_channel.telegram_bot_token and config.notification_channel.telegram_chat_id
+        )
+        status["notify_email"] = bool(
+            config.notification_channel.email_sender and config.notification_channel.email_password
+        )
 
         return status
 
