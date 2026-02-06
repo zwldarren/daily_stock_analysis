@@ -45,8 +45,8 @@ from .config import Config, get_config
 from .core.market_review import run_market_review
 from .core.pipeline import StockAnalysisPipeline
 from .feishu_doc import FeishuDocManager
-from .notification import NotificationService
-from .search_service import SearchService
+from .infrastructure.external.search import SearchService
+from .infrastructure.notification import NotificationService
 from .utils.logging_config import setup_logging
 
 
@@ -123,7 +123,7 @@ def run_full_analysis(config: Config, args: argparse.Namespace, stock_codes: lis
         results = pipeline.run(stock_codes=stock_codes, dry_run=args.dry_run, send_notification=not args.no_notify)
 
         # Issue #128: 分析间隔 - 在个股分析和大盘分析之间添加延迟
-        analysis_delay = getattr(config.schedule, "analysis_delay", 0)
+        analysis_delay = config.schedule.analysis_delay
         if analysis_delay > 0 and config.schedule.market_review_enabled and not args.no_market_review:
             logger.info(f"等待 {analysis_delay} 秒后执行大盘复盘（避免API限流）...")
             time.sleep(analysis_delay)
@@ -197,7 +197,7 @@ def start_bot_stream_clients(config: Config) -> None:
     # 启动钉钉 Stream 客户端
     if config.dingtalk_bot.dingtalk_stream_enabled:
         try:
-            from stock_analyzer.bot.platforms import (
+            from stock_analyzer.infrastructure.bot.platforms import (
                 DINGTALK_STREAM_AVAILABLE,
                 start_dingtalk_stream_background,
             )
@@ -216,7 +216,7 @@ def start_bot_stream_clients(config: Config) -> None:
     # 启动飞书 Stream 客户端
     if getattr(config.feishu_bot, "feishu_stream_enabled", False):
         try:
-            from stock_analyzer.bot.platforms import (
+            from stock_analyzer.infrastructure.bot.platforms import (
                 FEISHU_SDK_AVAILABLE,
                 start_feishu_stream_background,
             )

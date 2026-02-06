@@ -11,15 +11,16 @@ from typing import Any
 
 import pandas as pd
 
-from stock_analyzer.ai.analyzer import STOCK_NAME_MAP, GeminiAnalyzer
-from stock_analyzer.ai.models import AnalysisResult
+from stock_analyzer.ai.analyzer import GeminiAnalyzer
 from stock_analyzer.core.stage import PipelineStage, StageContext, StageExecutionError
 from stock_analyzer.data_provider import DataFetcherManager
 from stock_analyzer.data_provider.realtime_types import ChipDistribution, UnifiedRealtimeQuote
-from stock_analyzer.enums import ReportType
-from stock_analyzer.search_service import SearchService
-from stock_analyzer.stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
-from stock_analyzer.storage import DatabaseManager
+from stock_analyzer.domain import STOCK_NAME_MAP
+from stock_analyzer.domain.entities.analysis_result import AnalysisResult
+from stock_analyzer.domain.enums import ReportType
+from stock_analyzer.infrastructure.data import DatabaseManager
+from stock_analyzer.infrastructure.external.search import SearchService
+from stock_analyzer.technical import StockTrendAnalyzer, TrendAnalysisResult
 
 logger = logging.getLogger(__name__)
 

@@ -17,7 +17,25 @@ ruff format
 ruff check --fix
 
 # Type checking with ty
-ty check
+ty check .
+```
+
+### Running Tests
+```bash
+# Run all tests
+pytest
+
+# Run single test file
+pytest tests/test_module.py
+
+# Run specific test
+pytest tests/test_module.py::test_function_name
+
+# Run with verbose output
+pytest -v
+
+# Run with coverage
+pytest --cov=stock_analyzer
 ```
 
 ### Running the Application
@@ -74,45 +92,30 @@ docker run -it --env-file .env stock-analyzer
 - Constants: `UPPER_CASE`
 - Private methods: `_leading_underscore`
 
-### Error Handling
-- **Custom exceptions**: Extend `Exception` for domain-specific errors
-  ```python
-  class DataFetchError(Exception):
-      """Raised when data fetching fails"""
-      pass
-  ```
-- **Retry logic**: Use `tenacity` for transient failures
-  ```python
-  from tenacity import retry, stop_after_attempt, wait_exponential
-
-  @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-  def fetch_data():
-      pass
-  ```
-- **Logging**: Use module-level logger
-  ```python
-  logger = logging.getLogger(__name__)
-  logger.error("Failed to fetch data: %s", e)
-  ```
-
-### Architecture Patterns
-- **Dataclasses**: Use for data structures
-  ```python
-  @dataclass
-  class AnalysisResult:
-      stock_code: str
-      recommendation: str
-      confidence: float
-  ```
-- **Base classes**: Abstract base classes for pluggable components
-  - `BaseFetcher` in `data_provider/base.py`
-  - Allows multiple data sources (AkShare, YFinance, etc.)
-- **Configuration**: Centralized via `config.py` with `get_config()`
-
 ### Documentation
-- **Docstrings**: Use triple quotes for modules, classes, and functions
-- **Comments**: Chinese comments are acceptable (project is bilingual)
+- **Docstrings**: Use triple quotes for modules, classes, and functions (English)
+- **Comments**: Use Chinese comments for inline explanations (project is bilingual)
 - **Keep it practical**: Focus on "why" not "what"
+- **Example**:
+  ```python
+  def calculate_trend(self, data: pd.DataFrame) -> TrendResult:
+      """
+      Calculate market trend based on technical indicators.
+
+      Args:
+          data: Historical price data with OHLCV columns
+
+      Returns:
+          TrendResult with trend status and signals
+      """
+      # 计算移动平均线
+      ma5 = data['close'].rolling(5).mean()
+
+      # 判断多头排列
+      if ma5.iloc[-1] > ma10.iloc[-1] > ma20.iloc[-1]:
+          return TrendResult(status="bullish")
+      return TrendResult(status="bearish")
+  ```
 
 ## AI/ML Patterns
 
@@ -134,12 +137,12 @@ docker run -it --env-file .env stock-analyzer
 uv run stock-analyzer --stocks 600519 --no-notify --no-market-review
 
 # Check code before commit
-ruff check . && ruff format . && ty check . && ./test.sh syntax
+ruff check . && ruff format . && ty check . && pytest
 ```
 
 ## Notes
 
 - Environment variables: See `.env.example` for all options
-- No pytest currently
 - Supports A-shares, HK stocks, and US stocks
 - Uses multiple data sources for redundancy
+- Entry point: `uv run stock-analyzer` or `stock-analyzer` command

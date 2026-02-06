@@ -40,6 +40,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "pytest-cov>=6.0.0",
     "ruff>=0.14.14",
     "ty>=0.0.14",
 ]
@@ -69,3 +70,7 @@ select = [
     # isort
     "I",
 ]
+
+[tool.pytest.ini_options]
+addopts = "--tb=short --cov=stock_analyzer --cov-report=term-missing"
+testpaths = ["tests"]

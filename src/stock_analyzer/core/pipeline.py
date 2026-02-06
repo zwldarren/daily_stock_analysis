@@ -20,15 +20,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from typing import Any
 
-from stock_analyzer.ai.analyzer import STOCK_NAME_MAP
-from stock_analyzer.ai.models import AnalysisResult
-from stock_analyzer.bot.message_adapter import adapt_bot_message
-from stock_analyzer.bot.models import BotMessage
 from stock_analyzer.config import Config, get_config
-from stock_analyzer.data_provider.realtime_types import ChipDistribution
-from stock_analyzer.enums import ReportType
-from stock_analyzer.notification import NotificationChannel
-from stock_analyzer.stock_analyzer import TrendAnalysisResult
+from stock_analyzer.data_provider.realtime_types import ChipDistribution, UnifiedRealtimeQuote
+from stock_analyzer.domain import STOCK_NAME_MAP
+from stock_analyzer.domain.entities.analysis_result import AnalysisResult
+from stock_analyzer.domain.enums import ReportType
+from stock_analyzer.infrastructure.bot.message_adapter import adapt_bot_message
+from stock_analyzer.infrastructure.bot.models import BotMessage
+from stock_analyzer.infrastructure.notification import NotificationChannel
+from stock_analyzer.technical import TrendAnalysisResult
 
 logger = logging.getLogger(__name__)
 
@@ -440,7 +440,7 @@ class StockAnalysisPipeline:
         self,
         enhanced_context: dict[str, Any],
         news_content: str | None,
-        realtime_quote: Any,
+        realtime_quote: UnifiedRealtimeQuote | None,
         chip_data: ChipDistribution | None,
     ) -> dict[str, Any]:
         """
@@ -640,12 +640,12 @@ class StockAnalysisPipeline:
                 logger.info(f"已启用批量预取架构：一次拉取全市场数据，{len(stock_codes)} 只股票共享缓存")
 
         # 单股推送模式（#55）：从配置读取
-        single_stock_notify = getattr(self.config, "single_stock_notify", False)
+        single_stock_notify = self.config.notification_message.single_stock_notify
         # Issue #119: 从配置读取报告类型
-        report_type_str = getattr(self.config, "report_type", "simple").lower()
+        report_type_str = self.config.notification_message.report_type.lower()
         report_type = ReportType.FULL if report_type_str == "full" else ReportType.SIMPLE
         # Issue #128: 从配置读取分析间隔
-        analysis_delay = getattr(self.config, "analysis_delay", 0)
+        analysis_delay = self.config.schedule.analysis_delay
 
         if single_stock_notify:
             logger.info(f"已启用单股推送模式：每分析完一只股票立即推送（报告类型: {report_type_str}）")

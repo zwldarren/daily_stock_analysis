@@ -9,10 +9,10 @@ from dependency_injector import containers, providers
 from stock_analyzer.ai.analyzer import GeminiAnalyzer
 from stock_analyzer.config import get_config
 from stock_analyzer.data_provider import DataFetcherManager
-from stock_analyzer.notification import NotificationService
-from stock_analyzer.search_service import SearchService
-from stock_analyzer.stock_analyzer import StockTrendAnalyzer
-from stock_analyzer.storage import get_db
+from stock_analyzer.infrastructure.data import get_db
+from stock_analyzer.infrastructure.external.search import SearchService
+from stock_analyzer.infrastructure.notification import NotificationService
+from stock_analyzer.technical import StockTrendAnalyzer
 
 
 class Container(containers.DeclarativeContainer):

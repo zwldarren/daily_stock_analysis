@@ -16,7 +16,7 @@ from typing import Any
 
 from stock_analyzer.config import get_config
 from stock_analyzer.data_provider.base import DataFetcherManager
-from stock_analyzer.search_service import SearchService
+from stock_analyzer.infrastructure.external.search import SearchService
 
 logger = logging.getLogger(__name__)
 

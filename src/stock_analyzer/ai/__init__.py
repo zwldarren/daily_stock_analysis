@@ -12,7 +12,7 @@
 
 使用示例:
     >>> from stock_analyzer.ai.analyzer import GeminiAnalyzer
-    >>> from stock_analyzer.ai.models import AnalysisResult
+    >>> from stock_analyzer.domain.entities.analysis_result import AnalysisResult
     >>> analyzer = GeminiAnalyzer()
     >>> result = analyzer.analyze(context)
 
@@ -21,8 +21,9 @@
     - openai >= 2.0.0
 """
 
+from stock_analyzer.domain.entities.analysis_result import AnalysisResult
+
 from .analyzer import GeminiAnalyzer, get_analyzer
-from .models import AnalysisResult
 from .stock_names import STOCK_NAME_MAP, get_stock_name_multi_source
 
 __all__ = [
