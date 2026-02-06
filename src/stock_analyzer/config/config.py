@@ -92,6 +92,7 @@ class SearchConfig(BaseSettings):
     # 使用 str 存储原始值，通过 computed_field 返回列表
     bocha_api_keys_str: str = Field(default="", validation_alias="BOCHA_API_KEYS")
     tavily_api_keys_str: str = Field(default="", validation_alias="TAVILY_API_KEYS")
+    brave_api_keys_str: str = Field(default="", validation_alias="BRAVE_API_KEYS")
     serpapi_keys_str: str = Field(default="", validation_alias="SERPAPI_API_KEYS")
 
     @computed_field
@@ -103,6 +104,11 @@ class SearchConfig(BaseSettings):
     @property
     def tavily_api_keys(self) -> list[str]:
         return _parse_comma_list(self.tavily_api_keys_str)
+
+    @computed_field
+    @property
+    def brave_api_keys(self) -> list[str]:
+        return _parse_comma_list(self.brave_api_keys_str)
 
     @computed_field
     @property
@@ -372,8 +378,13 @@ class Config(BaseSettings):
         elif not self.ai.gemini_api_key:
             warnings_list.append("提示：未配置 Gemini API Key，将使用 OpenAI 兼容 API")
 
-        if not self.search.bocha_api_keys and not self.search.tavily_api_keys and not self.search.serpapi_keys:
-            warnings_list.append("提示：未配置搜索引擎 API Key (Bocha/Tavily/SerpAPI)，新闻搜索功能将不可用")
+        if (
+            not self.search.bocha_api_keys
+            and not self.search.tavily_api_keys
+            and not self.search.brave_api_keys
+            and not self.search.serpapi_keys
+        ):
+            warnings_list.append("提示：未配置搜索引擎 API Key (Bocha/Tavily/Brave/SerpAPI)，新闻搜索功能将不可用")
 
         # 检查通知配置
         has_notification = (

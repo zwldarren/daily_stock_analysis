@@ -57,6 +57,7 @@ class AnalysisResult:
     buy_reason: str = ""  # 买入/卖出理由
 
     # ========== 元数据 ==========
+    market_snapshot: dict[str, Any] | None = None  # 当日行情快照（展示用）
     raw_response: str | None = None  # 原始响应（调试用）
     search_performed: bool = False  # 是否执行了联网搜索
     data_sources: str = ""  # 数据来源说明
@@ -91,6 +92,7 @@ class AnalysisResult:
             "key_points": self.key_points,
             "risk_warning": self.risk_warning,
             "buy_reason": self.buy_reason,
+            "market_snapshot": self.market_snapshot,
             "search_performed": self.search_performed,
             "success": self.success,
             "error_message": self.error_message,

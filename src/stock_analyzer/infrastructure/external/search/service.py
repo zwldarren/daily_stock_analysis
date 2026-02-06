@@ -12,6 +12,7 @@ from stock_analyzer.infrastructure.external.search.models import SearchResponse
 from stock_analyzer.infrastructure.external.search.providers import (
     BaseSearchProvider,
     BochaSearchProvider,
+    BraveSearchProvider,
     SerpAPISearchProvider,
     TavilySearchProvider,
 )
@@ -42,6 +43,7 @@ class SearchService:
         self,
         bocha_keys: list[str] | None = None,
         tavily_keys: list[str] | None = None,
+        brave_keys: list[str] | None = None,
         serpapi_keys: list[str] | None = None,
     ):
         """
@@ -50,19 +52,28 @@ class SearchService:
         Args:
             bocha_keys: 博查搜索 API Key 列表
             tavily_keys: Tavily API Key 列表
+            brave_keys: Brave Search API Key 列表
             serpapi_keys: SerpAPI Key 列表
         """
         self._providers: list[BaseSearchProvider] = []
 
         # 初始化搜索引擎（按优先级排序）
+        # 1. Bocha 优先（中文搜索优化，AI摘要）
         if bocha_keys:
             self._providers.append(BochaSearchProvider(bocha_keys))
             logger.info(f"已配置 Bocha 搜索，共 {len(bocha_keys)} 个 API Key")
 
+        # 2. Tavily（免费额度更多，每月 1000 次）
         if tavily_keys:
             self._providers.append(TavilySearchProvider(tavily_keys))
             logger.info(f"已配置 Tavily 搜索，共 {len(tavily_keys)} 个 API Key")
 
+        # 3. Brave Search（隐私优先，全球覆盖）
+        if brave_keys:
+            self._providers.append(BraveSearchProvider(brave_keys))
+            logger.info(f"已配置 Brave 搜索，共 {len(brave_keys)} 个 API Key")
+
+        # 4. SerpAPI 作为备选（每月 100 次）
         if serpapi_keys:
             self._providers.append(SerpAPISearchProvider(serpapi_keys))
             logger.info(f"已配置 SerpAPI 搜索，共 {len(serpapi_keys)} 个 API Key")
@@ -338,6 +349,7 @@ def get_search_service() -> SearchService:
         _search_service = SearchService(
             bocha_keys=config.search.bocha_api_keys,
             tavily_keys=config.search.tavily_api_keys,
+            brave_keys=config.search.brave_api_keys,
             serpapi_keys=config.search.serpapi_keys,
         )
 

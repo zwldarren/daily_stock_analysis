@@ -494,6 +494,36 @@ class GeminiAnalyzer:
         # Ensure model name is set
         assert self._current_model_name is not None, "OpenAI model name is not set"
 
+        def _build_base_request_kwargs() -> dict:
+            kwargs = {
+                "model": self._current_model_name,
+                "messages": [
+                    {"role": "system", "content": self.SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": generation_config.get("temperature", config.ai.openai_temperature),
+            }
+            return kwargs
+
+        def _is_unsupported_param_error(error_message: str, param_name: str) -> bool:
+            lower_msg = error_message.lower()
+            return (
+                "400" in lower_msg or "unsupported parameter" in lower_msg or "unsupported param" in lower_msg
+            ) and param_name in lower_msg
+
+        if not hasattr(self, "_token_param_mode"):
+            self._token_param_mode = {}
+
+        max_output_tokens = generation_config.get("max_output_tokens", 8192)
+        model_name = self._current_model_name
+        mode = self._token_param_mode.get(model_name, "max_tokens")
+
+        def _kwargs_with_mode(mode_value):
+            kwargs = _build_base_request_kwargs()
+            if mode_value is not None:
+                kwargs[mode_value] = max_output_tokens
+            return kwargs
+
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
@@ -502,16 +532,22 @@ class GeminiAnalyzer:
                     logger.info(f"[OpenAI] 第 {attempt + 1} 次重试，等待 {delay:.1f} 秒...")
                     time.sleep(delay)
 
-                config = get_config()
-                response = self._openai_client.chat.completions.create(
-                    model=self._current_model_name,
-                    messages=[
-                        {"role": "system", "content": self.SYSTEM_PROMPT},
-                        {"role": "user", "content": prompt},
-                    ],
-                    temperature=generation_config.get("temperature", config.ai.openai_temperature),
-                    max_tokens=generation_config.get("max_output_tokens", 8192),
-                )
+                try:
+                    response = self._openai_client.chat.completions.create(**_kwargs_with_mode(mode))
+                except Exception as e:
+                    error_str = str(e)
+                    if mode == "max_tokens" and _is_unsupported_param_error(error_str, "max_tokens"):
+                        mode = "max_completion_tokens"
+                        self._token_param_mode[model_name] = mode
+                        response = self._openai_client.chat.completions.create(**_kwargs_with_mode(mode))
+                    elif mode == "max_completion_tokens" and _is_unsupported_param_error(
+                        error_str, "max_completion_tokens"
+                    ):
+                        mode = None
+                        self._token_param_mode[model_name] = mode
+                        response = self._openai_client.chat.completions.create(**_kwargs_with_mode(mode))
+                    else:
+                        raise
 
                 if response and response.choices and response.choices[0].message.content:
                     return response.choices[0].message.content
@@ -743,6 +779,7 @@ class GeminiAnalyzer:
             result = self._parse_response(response_text, code, name)
             result.raw_response = response_text
             result.search_performed = bool(news_context)
+            result.market_snapshot = self._build_market_snapshot(context)
 
             logger.info(f"[LLM解析] {name}({code}) 分析完成: {result.trend_prediction}, 评分 {result.sentiment_score}")
 
@@ -973,6 +1010,74 @@ class GeminiAnalyzer:
             return f"{amount / 1e4:.2f} 万元"
         else:
             return f"{amount:.0f} 元"
+
+    def _format_percent(self, value: float | None) -> str:
+        """格式化百分比显示"""
+        if value is None:
+            return "N/A"
+        try:
+            return f"{float(value):.2f}%"
+        except TypeError, ValueError:
+            return "N/A"
+
+    def _format_price(self, value: float | None) -> str:
+        """格式化价格显示"""
+        if value is None:
+            return "N/A"
+        try:
+            return f"{float(value):.2f}"
+        except TypeError, ValueError:
+            return "N/A"
+
+    def _build_market_snapshot(self, context: dict[str, Any]) -> dict[str, Any]:
+        """构建当日行情快照（展示用）"""
+        today = context.get("today", {}) or {}
+        realtime = context.get("realtime", {}) or {}
+        yesterday = context.get("yesterday", {}) or {}
+
+        prev_close = yesterday.get("close")
+        close = today.get("close")
+        high = today.get("high")
+        low = today.get("low")
+
+        amplitude = None
+        change_amount = None
+        if prev_close not in (None, 0) and high is not None and low is not None:
+            try:
+                amplitude = (float(high) - float(low)) / float(prev_close) * 100
+            except TypeError, ValueError, ZeroDivisionError:
+                amplitude = None
+        if prev_close is not None and close is not None:
+            try:
+                change_amount = float(close) - float(prev_close)
+            except TypeError, ValueError:
+                change_amount = None
+
+        snapshot = {
+            "date": context.get("date", "未知"),
+            "close": self._format_price(close),
+            "open": self._format_price(today.get("open")),
+            "high": self._format_price(high),
+            "low": self._format_price(low),
+            "prev_close": self._format_price(prev_close),
+            "pct_chg": self._format_percent(today.get("pct_chg")),
+            "change_amount": self._format_price(change_amount),
+            "amplitude": self._format_percent(amplitude),
+            "volume": self._format_volume(today.get("volume")),
+            "amount": self._format_amount(today.get("amount")),
+        }
+
+        if realtime:
+            snapshot.update(
+                {
+                    "price": self._format_price(realtime.get("price")),
+                    "volume_ratio": realtime.get("volume_ratio", "N/A"),
+                    "turnover_rate": self._format_percent(realtime.get("turnover_rate")),
+                    "source": getattr(realtime.get("source"), "value", realtime.get("source", "N/A")),
+                }
+            )
+
+        return snapshot
 
     def _parse_response(self, response_text: str, code: str, name: str) -> AnalysisResult:
         """

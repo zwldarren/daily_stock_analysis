@@ -43,7 +43,7 @@
 |------|------|
 | AI 模型 | Gemini（免费）、OpenAI 兼容、DeepSeek、通义千问、Claude、Ollama |
 | 行情数据 | AkShare、Tushare、Pytdx、Baostock、YFinance |
-| 新闻搜索 | Tavily、SerpAPI、Bocha |
+| 新闻搜索 | Tavily、SerpAPI、Bocha、Brave |
 
 ### 内置交易纪律
 
