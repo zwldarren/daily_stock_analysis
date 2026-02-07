@@ -140,7 +140,13 @@ class StockAnalysisOrchestrator:
         # 统计
         elapsed_time = time.time() - start_time
         logger.info("===== 分析完成 =====")
-        logger.info(f"成功: {len(results)}, 失败: {len(stock_codes) - len(results)}, 耗时: {elapsed_time:.2f} 秒")
+        if dry_run:
+            logger.info(
+                f"数据获取完成: {len(stock_codes)} 只股票, 耗时: {elapsed_time:.2f} 秒 (dry-run 模式跳过 AI 分析)"
+            )
+        else:
+            failed_count = len(stock_codes) - len(results)
+            logger.info(f"成功: {len(results)}, 失败: {failed_count}, 耗时: {elapsed_time:.2f} 秒")
 
         return results
 

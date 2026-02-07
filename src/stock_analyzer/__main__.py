@@ -21,12 +21,13 @@ A股自选股智能分析系统 - 主调度程序
 - 买点偏好：缩量回踩 MA5/MA10 支撑
 """
 
-import argparse
 import os
 import sys
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+
+import click
 
 # 代理配置 - 通过 USE_PROXY 环境变量控制，默认关闭
 # GitHub Actions 环境自动跳过代理配置
@@ -52,52 +53,145 @@ from .infrastructure.notification import NotificationService
 from .utils.logging_config import setup_logging
 
 
-def parse_arguments() -> argparse.Namespace:
-    """解析命令行参数"""
-    parser = argparse.ArgumentParser(
-        description="A股自选股智能分析系统",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-示例:
-  python main.py                    # 正常运行
-  python main.py --debug            # 调试模式
-  python main.py --dry-run          # 仅获取数据，不进行 AI 分析
-  python main.py --stocks 600519,000001  # 指定分析特定股票
-  python main.py --no-notify        # 不发送推送通知
-  python main.py --single-notify    # 启用单股推送模式（每分析完一只立即推送）
-  python main.py --schedule         # 启用定时任务模式
-  python main.py --market-review    # 仅运行大盘复盘
-        """,
-    )
+@click.command()
+@click.option("--debug", is_flag=True, help="启用调试模式，输出详细日志")
+@click.option("--dry-run", is_flag=True, help="仅获取数据，不进行 AI 分析")
+@click.option("--stocks", type=str, help="指定要分析的股票代码，逗号分隔（覆盖配置文件）")
+@click.option("--no-notify", is_flag=True, help="不发送推送通知")
+@click.option(
+    "--single-notify",
+    is_flag=True,
+    help="启用单股推送模式：每分析完一只股票立即推送，而不是汇总推送",
+)
+@click.option("--workers", type=int, default=None, help="并发线程数（默认使用配置值）")
+@click.option("--schedule", is_flag=True, help="启用定时任务模式，每日定时执行")
+@click.option("--market-review", is_flag=True, help="仅运行大盘复盘分析")
+@click.option("--no-market-review", is_flag=True, help="跳过大盘复盘分析")
+@click.option("--no-context-snapshot", is_flag=True, help="不保存分析上下文快照")
+def main(
+    debug: bool,
+    dry_run: bool,
+    stocks: str | None,
+    no_notify: bool,
+    single_notify: bool,
+    workers: int | None,
+    schedule: bool,
+    market_review: bool,
+    no_market_review: bool,
+    no_context_snapshot: bool,
+) -> int:
+    """A股自选股智能分析系统
 
-    parser.add_argument("--debug", action="store_true", help="启用调试模式，输出详细日志")
+    示例:
+        stock-analyzer                    # 正常运行
+        stock-analyzer --debug            # 调试模式
+        stock-analyzer --dry-run          # 仅获取数据，不进行 AI 分析
+        stock-analyzer --stocks 600519,000001  # 指定分析特定股票
+        stock-analyzer --no-notify        # 不发送推送通知
+        stock-analyzer --single-notify    # 启用单股推送模式
+        stock-analyzer --schedule         # 启用定时任务模式
+        stock-analyzer --market-review    # 仅运行大盘复盘
+    """
+    # 加载配置（在设置日志前加载，以获取日志目录）
+    config = get_config()
 
-    parser.add_argument("--dry-run", action="store_true", help="仅获取数据，不进行 AI 分析")
+    # 配置日志（输出到控制台和文件）
+    setup_logging(debug=debug, log_dir=config.logging.log_dir)
 
-    parser.add_argument("--stocks", type=str, help="指定要分析的股票代码，逗号分隔（覆盖配置文件）")
+    logger.info("=" * 60)
+    logger.info("A股自选股智能分析系统 启动")
+    logger.info(f"运行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("=" * 60)
 
-    parser.add_argument("--no-notify", action="store_true", help="不发送推送通知")
+    # 注册事件处理器（激活DDD事件系统）
+    register_event_handlers()
 
-    parser.add_argument(
-        "--single-notify",
-        action="store_true",
-        help="启用单股推送模式：每分析完一只股票立即推送，而不是汇总推送",
-    )
+    # 验证配置
+    warnings = config.validate_config()
+    for warning in warnings:
+        logger.warning(warning)
 
-    parser.add_argument("--workers", type=int, default=None, help="并发线程数（默认使用配置值）")
+    # 解析股票列表
+    stock_codes = None
+    if stocks:
+        stock_codes = [code.strip() for code in stocks.split(",") if code.strip()]
+        logger.info(f"使用命令行指定的股票列表: {stock_codes}")
 
-    parser.add_argument("--schedule", action="store_true", help="启用定时任务模式，每日定时执行")
+    try:
+        # 模式1: 仅大盘复盘
+        if market_review:
+            logger.info("模式: 仅大盘复盘")
+            notifier = NotificationService()
 
-    parser.add_argument("--market-review", action="store_true", help="仅运行大盘复盘分析")
+            # 初始化搜索服务和分析器（如果有配置）
+            search_service = None
+            analyzer = None
 
-    parser.add_argument("--no-market-review", action="store_true", help="跳过大盘复盘分析")
+            if config.search.bocha_api_keys or config.search.tavily_api_keys or config.search.serpapi_keys:
+                search_service = SearchService(
+                    bocha_keys=config.search.bocha_api_keys,
+                    tavily_keys=config.search.tavily_api_keys,
+                    serpapi_keys=config.search.serpapi_keys,
+                )
 
-    parser.add_argument("--no-context-snapshot", action="store_true", help="不保存分析上下文快照")
+            if config.ai.gemini_api_key or config.ai.openai_api_key:
+                analyzer = GeminiAnalyzer(api_key=config.ai.gemini_api_key)
+                if not analyzer.is_available():
+                    logger.warning("AI 分析器初始化后不可用，请检查 API Key 配置")
+                    analyzer = None
+            else:
+                logger.warning("未检测到 API Key (Gemini/OpenAI)，将仅使用模板生成报告")
 
-    return parser.parse_args()
+            run_market_review(
+                notifier=notifier,
+                analyzer=analyzer,
+                search_service=search_service,
+                send_notification=not no_notify,
+            )
+            return 0
+
+        # 模式2: 定时任务模式
+        if schedule or config.schedule.schedule_enabled:
+            logger.info("模式: 定时任务")
+            logger.info(f"每日执行时间: {config.schedule.schedule_time}")
+
+            from stock_analyzer.application.scheduler import run_with_schedule
+
+            def scheduled_task():
+                run_full_analysis(config, stock_codes, dry_run, no_notify, single_notify, workers, no_market_review)
+
+            run_with_schedule(
+                task=scheduled_task,
+                schedule_time=config.schedule.schedule_time,
+                run_immediately=True,  # 启动时先执行一次
+            )
+            return 0
+
+        # 模式3: 正常单次运行
+        run_full_analysis(config, stock_codes, dry_run, no_notify, single_notify, workers, no_market_review)
+
+        logger.info("\n程序执行完成")
+
+        return 0
+
+    except KeyboardInterrupt:
+        logger.info("\n用户中断，程序退出")
+        return 130
+
+    except Exception as e:
+        logger.exception(f"程序执行失败: {e}")
+        return 1
 
 
-def run_full_analysis(config: Config, args: argparse.Namespace, stock_codes: list[str] | None = None):
+def run_full_analysis(
+    config: Config,
+    stock_codes: list[str] | None,
+    dry_run: bool,
+    no_notify: bool,
+    single_notify: bool,
+    workers: int | None,
+    no_market_review: bool,
+):
     """
     执行完整的分析流程（个股 + 大盘复盘）
 
@@ -105,30 +199,30 @@ def run_full_analysis(config: Config, args: argparse.Namespace, stock_codes: lis
     """
     try:
         # 命令行参数 --single-notify 覆盖配置（#55）
-        if getattr(args, "single_notify", False):
+        if single_notify:
             config.notification_message.single_stock_notify = True
 
         # 创建编排器
         query_id = uuid.uuid4().hex
         orchestrator = StockAnalysisOrchestrator(
             config=config,
-            max_workers=args.workers,
+            max_workers=workers,
             query_id=query_id,
             query_source="cli",
         )
 
         # 1. 运行个股分析
-        results = orchestrator.run(stock_codes=stock_codes, dry_run=args.dry_run, send_notification=not args.no_notify)
+        results = orchestrator.run(stock_codes=stock_codes, dry_run=dry_run, send_notification=not no_notify)
 
         # Issue #128: 分析间隔 - 在个股分析和大盘分析之间添加延迟
         analysis_delay = config.schedule.analysis_delay
-        if analysis_delay > 0 and config.schedule.market_review_enabled and not args.no_market_review:
+        if analysis_delay > 0 and config.schedule.market_review_enabled and not no_market_review:
             logger.info(f"等待 {analysis_delay} 秒后执行大盘复盘（避免API限流）...")
             time.sleep(analysis_delay)
 
         # 2. 运行大盘复盘（如果启用且不是仅个股模式）
         market_report = ""
-        if config.schedule.market_review_enabled and not args.no_market_review:
+        if config.schedule.market_review_enabled and not no_market_review:
             # 从容器获取AI分析器和搜索服务
             from stock_analyzer.container import get_container
 
@@ -141,7 +235,7 @@ def run_full_analysis(config: Config, args: argparse.Namespace, stock_codes: lis
                 notifier=orchestrator.notifier,
                 analyzer=analyzer,
                 search_service=search_service,
-                send_notification=not args.no_notify,
+                send_notification=not no_notify,
             )
             # 如果有结果，赋值给 market_report 用于后续飞书文档生成
             if review_result:
@@ -187,7 +281,7 @@ def run_full_analysis(config: Config, args: argparse.Namespace, stock_codes: lis
                 if doc_url:
                     logger.info(f"飞书云文档创建成功: {doc_url}")
                     # 可选：将文档链接也推送到群里
-                    if not args.no_notify:
+                    if not no_notify:
                         orchestrator.notifier.send(f"[{now.strftime('%Y-%m-%d %H:%M')}] 复盘文档创建成功: {doc_url}")
 
         except Exception as e:
@@ -195,148 +289,6 @@ def run_full_analysis(config: Config, args: argparse.Namespace, stock_codes: lis
 
     except Exception as e:
         logger.exception(f"分析流程执行失败: {e}")
-
-
-def start_bot_stream_clients(config: Config) -> None:
-    """Start bot stream clients when enabled in config."""
-    # 启动钉钉 Stream 客户端
-    if config.dingtalk_bot.dingtalk_stream_enabled:
-        try:
-            from stock_analyzer.infrastructure.bot.platforms import (
-                DINGTALK_STREAM_AVAILABLE,
-                start_dingtalk_stream_background,
-            )
-
-            if DINGTALK_STREAM_AVAILABLE:
-                if start_dingtalk_stream_background():
-                    logger.info("[Main] Dingtalk Stream client started in background.")
-                else:
-                    logger.warning("[Main] Dingtalk Stream client failed to start.")
-            else:
-                logger.warning("[Main] Dingtalk Stream enabled but SDK is missing.")
-                logger.warning("[Main] Run: pip install dingtalk-stream")
-        except Exception as exc:
-            logger.error(f"[Main] Failed to start Dingtalk Stream client: {exc}")
-
-    # 启动飞书 Stream 客户端
-    if getattr(config.feishu_bot, "feishu_stream_enabled", False):
-        try:
-            from stock_analyzer.infrastructure.bot.platforms import (
-                FEISHU_SDK_AVAILABLE,
-                start_feishu_stream_background,
-            )
-
-            if FEISHU_SDK_AVAILABLE:
-                if start_feishu_stream_background():
-                    logger.info("[Main] Feishu Stream client started in background.")
-                else:
-                    logger.warning("[Main] Feishu Stream client failed to start.")
-            else:
-                logger.warning("[Main] Feishu Stream enabled but SDK is missing.")
-                logger.warning("[Main] Run: pip install lark-oapi")
-        except Exception as exc:
-            logger.error(f"[Main] Failed to start Feishu Stream client: {exc}")
-
-
-def main() -> int:
-    """
-    主入口函数
-
-    Returns:
-        退出码（0 表示成功）
-    """
-    # 解析命令行参数
-    args = parse_arguments()
-
-    # 加载配置（在设置日志前加载，以获取日志目录）
-    config = get_config()
-
-    # 配置日志（输出到控制台和文件）
-    setup_logging(debug=args.debug, log_dir=config.logging.log_dir)
-
-    logger.info("=" * 60)
-    logger.info("A股自选股智能分析系统 启动")
-    logger.info(f"运行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info("=" * 60)
-
-    # 注册事件处理器（激活DDD事件系统）
-    register_event_handlers()
-
-    # 验证配置
-    warnings = config.validate_config()
-    for warning in warnings:
-        logger.warning(warning)
-
-    # 解析股票列表
-    stock_codes = None
-    if args.stocks:
-        stock_codes = [code.strip() for code in args.stocks.split(",") if code.strip()]
-        logger.info(f"使用命令行指定的股票列表: {stock_codes}")
-
-    try:
-        # 模式1: 仅大盘复盘
-        if args.market_review:
-            logger.info("模式: 仅大盘复盘")
-            notifier = NotificationService()
-
-            # 初始化搜索服务和分析器（如果有配置）
-            search_service = None
-            analyzer = None
-
-            if config.search.bocha_api_keys or config.search.tavily_api_keys or config.search.serpapi_keys:
-                search_service = SearchService(
-                    bocha_keys=config.search.bocha_api_keys,
-                    tavily_keys=config.search.tavily_api_keys,
-                    serpapi_keys=config.search.serpapi_keys,
-                )
-
-            if config.ai.gemini_api_key or config.ai.openai_api_key:
-                analyzer = GeminiAnalyzer(api_key=config.ai.gemini_api_key)
-                if not analyzer.is_available():
-                    logger.warning("AI 分析器初始化后不可用，请检查 API Key 配置")
-                    analyzer = None
-            else:
-                logger.warning("未检测到 API Key (Gemini/OpenAI)，将仅使用模板生成报告")
-
-            run_market_review(
-                notifier=notifier,
-                analyzer=analyzer,
-                search_service=search_service,
-                send_notification=not args.no_notify,
-            )
-            return 0
-
-        # 模式2: 定时任务模式
-        if args.schedule or config.schedule.schedule_enabled:
-            logger.info("模式: 定时任务")
-            logger.info(f"每日执行时间: {config.schedule.schedule_time}")
-
-            from stock_analyzer.application.scheduler import run_with_schedule
-
-            def scheduled_task():
-                run_full_analysis(config, args, stock_codes)
-
-            run_with_schedule(
-                task=scheduled_task,
-                schedule_time=config.schedule.schedule_time,
-                run_immediately=True,  # 启动时先执行一次
-            )
-            return 0
-
-        # 模式3: 正常单次运行
-        run_full_analysis(config, args, stock_codes)
-
-        logger.info("\n程序执行完成")
-
-        return 0
-
-    except KeyboardInterrupt:
-        logger.info("\n用户中断，程序退出")
-        return 130
-
-    except Exception as e:
-        logger.exception(f"程序执行失败: {e}")
-        return 1
 
 
 if __name__ == "__main__":
