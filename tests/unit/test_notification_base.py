@@ -5,8 +5,6 @@
 - NotificationChannel 枚举
 - ChannelDetector 渠道检测器
 - NotificationChannelBase 抽象基类
-
-@author: Kilo Code
 """
 
 from abc import ABC

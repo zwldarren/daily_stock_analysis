@@ -205,7 +205,7 @@ class FallbackManager:
         return FallbackManager(strategy)
 
 
-def with_fallback(*fallbacks: Callable[[], Any]) -> Callable[[Callable[[], Any]], Any]:
+def with_fallback(*fallbacks: Callable[[], Any]) -> Callable[[Callable[[], Any]], Callable[[], Any]]:
     """
     装饰器风格的回退执行
 
@@ -216,12 +216,19 @@ def with_fallback(*fallbacks: Callable[[], Any]) -> Callable[[Callable[[], Any]]
         def fetch_from_source_b():
             return fetch_data("source_b")
 
-        result = with_fallback(fetch_from_source_b)(fetch_from_source_a)
+        @with_fallback(fetch_from_source_b)
+        def fetch_data():
+            return fetch_from_source_a()
+
+        result = fetch_data()
     """
 
-    def decorator(operation: Callable[[], Any]) -> Any:
-        manager: FallbackManager = FallbackManager()
-        return manager.execute(operation, *fallbacks)
+    def decorator(operation: Callable[[], Any]) -> Callable[[], Any]:
+        def wrapper() -> Any:
+            manager: FallbackManager = FallbackManager()
+            return manager.execute(operation, *fallbacks)
+
+        return wrapper
 
     return decorator
 

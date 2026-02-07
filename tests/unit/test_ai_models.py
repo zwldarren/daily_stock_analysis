@@ -6,8 +6,6 @@
 - 数据转换方法
 - 辅助方法（emoji, stars等）
 - Dashboard 数据处理
-
-@author: Kilo Code
 """
 
 import pytest

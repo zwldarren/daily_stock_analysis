@@ -6,8 +6,6 @@
 - BaseFetcher 抽象基类
 - DataFetcherManager 管理器
 - 标准化列定义
-
-@author: Kilo Code
 """
 
 from unittest.mock import patch
