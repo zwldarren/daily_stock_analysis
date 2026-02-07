@@ -52,6 +52,7 @@ class StockAnalysisOrchestrator:
         batch_command: BatchAnalyzeStocksCommand | None = None,
         fetch_command: FetchStockDataCommand | None = None,
         analyze_command: AnalyzeStockCommand | None = None,
+        save_context_snapshot: bool = True,
     ):
         """
         初始化编排器
@@ -65,12 +66,14 @@ class StockAnalysisOrchestrator:
             batch_command: 批量分析命令（可选，默认从容器获取）
             fetch_command: 数据获取命令（可选，默认从容器获取）
             analyze_command: 单股分析命令（可选，默认从容器获取）
+            save_context_snapshot: 是否保存上下文快照
         """
         self.config = config or get_config()
         self.max_workers = max_workers or self.config.system.max_workers
         self.source_message = source_message
         self.query_id = query_id
         self.query_source = self._resolve_query_source(query_source)
+        self.save_context_snapshot = save_context_snapshot
 
         # 从容器获取依赖或直接使用注入的依赖
         container = get_container()
@@ -199,7 +202,9 @@ class StockAnalysisOrchestrator:
             return self._run_single_stock_mode(stock_codes, report_type, send_notification)
 
         # 批量分析模式
-        command_result = self._batch_command.execute(stock_codes, report_type)
+        command_result = self._batch_command.execute(
+            stock_codes, report_type, save_context_snapshot=self.save_context_snapshot
+        )
 
         if not command_result.success or not command_result.data:
             logger.error(f"批量分析失败: {command_result.message}")
@@ -222,7 +227,9 @@ class StockAnalysisOrchestrator:
         for code in stock_codes:
             try:
                 # 使用单股分析命令
-                result = self._analyze_command.execute(code, report_type)
+                result = self._analyze_command.execute(
+                    code, report_type, save_context_snapshot=self.save_context_snapshot
+                )
 
                 if result.success and result.data:
                     results.append(result.data)

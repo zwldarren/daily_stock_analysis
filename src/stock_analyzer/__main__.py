@@ -161,7 +161,16 @@ def main(
             from stock_analyzer.application.scheduler import run_with_schedule
 
             def scheduled_task():
-                run_full_analysis(config, stock_codes, dry_run, no_notify, single_notify, workers, no_market_review)
+                run_full_analysis(
+                    config,
+                    stock_codes,
+                    dry_run,
+                    no_notify,
+                    single_notify,
+                    workers,
+                    no_market_review,
+                    no_context_snapshot,
+                )
 
             run_with_schedule(
                 task=scheduled_task,
@@ -171,7 +180,9 @@ def main(
             return 0
 
         # 模式3: 正常单次运行
-        run_full_analysis(config, stock_codes, dry_run, no_notify, single_notify, workers, no_market_review)
+        run_full_analysis(
+            config, stock_codes, dry_run, no_notify, single_notify, workers, no_market_review, no_context_snapshot
+        )
 
         logger.info("\n程序执行完成")
 
@@ -194,6 +205,7 @@ def run_full_analysis(
     single_notify: bool,
     workers: int | None,
     no_market_review: bool,
+    no_context_snapshot: bool = False,
 ):
     """
     执行完整的分析流程（个股 + 大盘复盘）
@@ -207,11 +219,14 @@ def run_full_analysis(
 
         # 创建编排器
         query_id = uuid.uuid4().hex
+        # 确定是否保存上下文快照：命令行参数优先，否则使用配置
+        save_context_snapshot = not no_context_snapshot and config.database.save_context_snapshot
         orchestrator = StockAnalysisOrchestrator(
             config=config,
             max_workers=workers,
             query_id=query_id,
             query_source="cli",
+            save_context_snapshot=save_context_snapshot,
         )
 
         # 1. 运行个股分析

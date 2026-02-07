@@ -113,6 +113,12 @@ class SearchConfig(BaseSettings):
     searxng_password: str | None = Field(default=None, validation_alias="SEARXNG_PASSWORD")
     searxng_priority: int = Field(default=1, ge=0, le=100, validation_alias="SEARXNG_PRIORITY")
 
+    # 搜索引擎优先级配置（数值越小优先级越高）
+    tavily_priority: int = Field(default=2, ge=0, le=100, validation_alias="TAVILY_PRIORITY")
+    brave_priority: int = Field(default=3, ge=0, le=100, validation_alias="BRAVE_PRIORITY")
+    serpapi_priority: int = Field(default=4, ge=0, le=100, validation_alias="SERPAPI_PRIORITY")
+    bocha_priority: int = Field(default=5, ge=0, le=100, validation_alias="BOCHA_PRIORITY")
+
     @computed_field
     @property
     def bocha_api_keys(self) -> list[str]:

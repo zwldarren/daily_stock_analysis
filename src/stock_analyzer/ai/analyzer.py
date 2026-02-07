@@ -53,6 +53,10 @@ class GeminiAnalyzer(IAIAnalyzer):
         self._openai_client = OpenAIClient()
         self._use_openai = False
 
+        # 预创建回退策略对象，避免每次调用时重复创建
+        self._fallback_gemini_primary = create_sequential_fallback(name="ai_gemini_fallback")
+        self._fallback_openai_primary = create_sequential_fallback(name="ai_openai_fallback")
+
         # 如果Gemini不可用，检查OpenAI
         if not self._gemini_client.is_available():
             if self._openai_client.is_available():
@@ -86,18 +90,16 @@ class GeminiAnalyzer(IAIAnalyzer):
         def call_openai() -> str:
             return self._openai_client.generate(prompt, generation_config)
 
-        # 根据配置决定主操作
+        # 根据配置决定主操作，使用预创建的回退对象
         if self._use_openai:
             # OpenAI 为主，Gemini 为回退
             if self._gemini_client.is_available():
-                fallback = create_sequential_fallback(name="ai_openai_fallback")
-                return fallback.execute(call_openai, call_gemini)
+                return self._fallback_openai_primary.execute(call_openai, call_gemini)
             return call_openai()
         else:
             # Gemini 为主，OpenAI 为回退
             if self._openai_client.is_available():
-                fallback = create_sequential_fallback(name="ai_gemini_fallback")
-                return fallback.execute(call_gemini, call_openai)
+                return self._fallback_gemini_primary.execute(call_gemini, call_openai)
             return call_gemini()
 
     def analyze(self, context: dict[str, Any], news_context: str | None = None) -> AnalysisResult:

@@ -10,6 +10,7 @@ from typing import Any
 
 from stock_analyzer.ai.prompts import SYSTEM_PROMPT
 from stock_analyzer.config import get_config
+from stock_analyzer.utils import calculate_backoff_delay
 
 logger = logging.getLogger(__name__)
 
@@ -142,8 +143,7 @@ class GeminiClient:
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
-                    delay = base_delay * (2 ** (attempt - 1))
-                    delay = min(delay, 60)
+                    delay = calculate_backoff_delay(attempt, base_delay, max_delay=60.0)
                     logger.info(f"[Gemini] 第 {attempt + 1} 次重试，等待 {delay:.1f} 秒...")
                     time.sleep(delay)
 
@@ -283,8 +283,7 @@ class OpenAIClient:
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
-                    delay = base_delay * (2 ** (attempt - 1))
-                    delay = min(delay, 60)
+                    delay = calculate_backoff_delay(attempt, base_delay, max_delay=60.0)
                     logger.info(f"[OpenAI] 第 {attempt + 1} 次重试，等待 {delay:.1f} 秒...")
                     time.sleep(delay)
 

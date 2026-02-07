@@ -92,6 +92,10 @@ class ServiceContainer(containers.DeclarativeContainer):
         searxng_username=infrastructure.config.provided.search.searxng_username,
         searxng_password=infrastructure.config.provided.search.searxng_password,
         searxng_priority=infrastructure.config.provided.search.searxng_priority,
+        tavily_priority=infrastructure.config.provided.search.tavily_priority,
+        brave_priority=infrastructure.config.provided.search.brave_priority,
+        serpapi_priority=infrastructure.config.provided.search.serpapi_priority,
+        bocha_priority=infrastructure.config.provided.search.bocha_priority,
     )
 
 

@@ -60,6 +60,10 @@ class SearchService(ISearchService):
         searxng_username: str | None = None,
         searxng_password: str | None = None,
         searxng_priority: int = 1,
+        tavily_priority: int = 2,
+        brave_priority: int = 3,
+        serpapi_priority: int = 4,
+        bocha_priority: int = 5,
     ):
         """
         Initialize the search service.
@@ -73,6 +77,10 @@ class SearchService(ISearchService):
             searxng_username: Searxng Basic Auth username.
             searxng_password: Searxng Basic Auth password.
             searxng_priority: Searxng priority (default: 1 for highest).
+            tavily_priority: Tavily priority (default: 2).
+            brave_priority: Brave priority (default: 3).
+            serpapi_priority: SerpAPI priority (default: 4).
+            bocha_priority: Bocha priority (default: 5).
         """
         self._providers = []
 
@@ -96,19 +104,27 @@ class SearchService(ISearchService):
 
         # 2. Tavily (1000 requests/month free tier)
         if tavily_keys:
-            provider_configs.append((2, "tavily", ApiKeyProviderConfig(api_keys=tavily_keys, priority=2)))
+            provider_configs.append(
+                (tavily_priority, "tavily", ApiKeyProviderConfig(api_keys=tavily_keys, priority=tavily_priority))
+            )
 
         # 3. Brave Search (free tier available)
         if brave_keys:
-            provider_configs.append((3, "brave", ApiKeyProviderConfig(api_keys=brave_keys, priority=3)))
+            provider_configs.append(
+                (brave_priority, "brave", ApiKeyProviderConfig(api_keys=brave_keys, priority=brave_priority))
+            )
 
         # 4. SerpAPI (100 requests/month free tier)
         if serpapi_keys:
-            provider_configs.append((4, "serpapi", ApiKeyProviderConfig(api_keys=serpapi_keys, priority=4)))
+            provider_configs.append(
+                (serpapi_priority, "serpapi", ApiKeyProviderConfig(api_keys=serpapi_keys, priority=serpapi_priority))
+            )
 
         # 5. Bocha (paid only, Chinese optimized)
         if bocha_keys:
-            provider_configs.append((5, "bocha", ApiKeyProviderConfig(api_keys=bocha_keys, priority=5)))
+            provider_configs.append(
+                (bocha_priority, "bocha", ApiKeyProviderConfig(api_keys=bocha_keys, priority=bocha_priority))
+            )
 
         # Sort by priority and create providers
         provider_configs.sort(key=lambda x: x[0])
@@ -489,6 +505,10 @@ def get_search_service() -> SearchService:
             searxng_username=config.search.searxng_username,
             searxng_password=config.search.searxng_password,
             searxng_priority=config.search.searxng_priority,
+            tavily_priority=config.search.tavily_priority,
+            brave_priority=config.search.brave_priority,
+            serpapi_priority=config.search.serpapi_priority,
+            bocha_priority=config.search.bocha_priority,
         )
 
     return _search_service

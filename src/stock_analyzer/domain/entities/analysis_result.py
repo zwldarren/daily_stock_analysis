@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-@dataclass
+@dataclass(slots=True)
 class AnalysisResult:
     """
     AI 分析结果数据类 - 决策仪表盘版

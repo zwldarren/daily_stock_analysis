@@ -355,18 +355,26 @@ class DataFetcherManager:
         logger.warning(f"[实时行情] {stock_code} 所有数据源均失败")
         return None
 
+    # 数据源映射配置: (source_key) -> (fetcher_name, extra_kwargs)
+    _REALTIME_SOURCE_MAP: dict[str, tuple[str, dict[str, Any]]] = {
+        "efinance": ("EfinanceFetcher", {}),
+        "akshare_em": ("AkshareFetcher", {"source": "em"}),
+        "akshare_sina": ("AkshareFetcher", {"source": "sina"}),
+        "tencent": ("AkshareFetcher", {"source": "tencent"}),
+        "akshare_qq": ("AkshareFetcher", {"source": "tencent"}),
+        "tushare": ("TushareFetcher", {}),
+    }
+
     def _try_get_realtime_by_source(self, stock_code: str, source: str):
         """尝试从指定数据源获取实时行情"""
+        mapping = self._REALTIME_SOURCE_MAP.get(source)
+        if not mapping:
+            return None
+
+        fetcher_name, extra_kwargs = mapping
         for fetcher in self._fetchers:
-            if source == "efinance" and fetcher.name == "EfinanceFetcher":
-                return fetcher.get_realtime_quote(stock_code)
-            elif source in ("akshare_em", "akshare_sina") and fetcher.name == "AkshareFetcher":
-                src = "em" if source == "akshare_em" else "sina"
-                return fetcher.get_realtime_quote(stock_code, source=src)
-            elif source in ("tencent", "akshare_qq") and fetcher.name == "AkshareFetcher":
-                return fetcher.get_realtime_quote(stock_code, source="tencent")
-            elif source == "tushare" and fetcher.name == "TushareFetcher":
-                return fetcher.get_realtime_quote(stock_code)
+            if fetcher.name == fetcher_name:
+                return fetcher.get_realtime_quote(stock_code, **extra_kwargs)
         return None
 
     def get_chip_distribution(self, stock_code: str):

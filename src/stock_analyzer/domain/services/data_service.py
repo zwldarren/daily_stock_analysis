@@ -35,6 +35,8 @@ class DataService:
         # Initialize TTL cache for real-time data and stock names
         # Default TTL will be set based on config when needed
         self._cache: TTLCache[str, Any] = TTLCache(maxsize=1000, ttl=600)
+        # Track cache entry expiration times for custom TTL support
+        self._cache_expiry: dict[str, float] = {}
 
         logger.info("DataService initialized")
 
@@ -241,24 +243,34 @@ class DataService:
         """Invalidate cache entries matching the pattern. If pattern is None, clear all cache."""
         if pattern is None:
             self._cache.clear()
+            self._cache_expiry.clear()
             logger.info("[DataService] All cache cleared")
         else:
             keys_to_remove = [k for k in self._cache if fnmatch.fnmatch(k, pattern)]
             for key in keys_to_remove:
                 del self._cache[key]
+                self._cache_expiry.pop(key, None)
             logger.info(f"[DataService] Cache cleared: {pattern} ({len(keys_to_remove)} entries)")
 
     def _is_cache_valid(self, key: str) -> bool:
         """Check if cache entry is valid (exists and not expired)."""
-        return key in self._cache
+        if key not in self._cache:
+            return False
+        # Check custom expiry if set
+        if key in self._cache_expiry:
+            import time
+
+            if time.time() > self._cache_expiry[key]:
+                # Expired, remove from cache
+                del self._cache[key]
+                del self._cache_expiry[key]
+                return False
+        return True
 
     def _set_cache(self, key: str, value: Any, ttl_seconds: int) -> None:
         """Set cache entry with TTL (time-to-live) in seconds."""
-        # Note: TTLCache automatically handles TTL per entry
-        # We create a new cache with the specified TTL if needed
-        if self._cache.ttl != ttl_seconds:
-            # Create new cache with updated TTL and copy existing entries
-            old_cache = dict(self._cache)
-            self._cache = TTLCache(maxsize=1000, ttl=ttl_seconds)
-            self._cache.update(old_cache)
+        import time
+
         self._cache[key] = value
+        # Store custom expiry time for this entry
+        self._cache_expiry[key] = time.time() + ttl_seconds

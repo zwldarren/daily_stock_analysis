@@ -60,6 +60,7 @@ class AnalyzeStockCommand:
         stock_code: str,
         report_type: ReportType = ReportType.SIMPLE,
         skip_save: bool = False,
+        save_context_snapshot: bool = True,
     ) -> CommandResult:
         """
         执行分析命令
@@ -68,6 +69,7 @@ class AnalyzeStockCommand:
             stock_code: 股票代码
             report_type: 报告类型
             skip_save: 是否跳过保存结果
+            save_context_snapshot: 是否保存上下文快照
 
         Returns:
             CommandResult
@@ -98,6 +100,7 @@ class AnalyzeStockCommand:
                     query_id="",
                     report_type=report_type.value,
                     news_content=news_context,
+                    save_snapshot=save_context_snapshot,
                 )
 
             # 发布分析完成事件
@@ -225,6 +228,7 @@ class BatchAnalyzeStocksCommand:
         self,
         stock_codes: list[str],
         report_type: ReportType = ReportType.SIMPLE,
+        save_context_snapshot: bool = True,
     ) -> CommandResult:
         """
         执行批量分析
@@ -237,6 +241,7 @@ class BatchAnalyzeStocksCommand:
         Args:
             stock_codes: 股票代码列表
             report_type: 报告类型
+            save_context_snapshot: 是否保存上下文快照
 
         Returns:
             CommandResult（包含结果列表）
@@ -281,6 +286,7 @@ class BatchAnalyzeStocksCommand:
                             query_id="",
                             report_type=report_type.value,
                             news_content=news_contexts[i],
+                            save_snapshot=save_context_snapshot,
                         )
                     except Exception as e:
                         logger.warning(f"[{result.code}] 保存分析历史失败: {e}")

@@ -28,3 +28,31 @@ __all__ = [
     "is_etf_code",
     "normalize_stock_code",
 ]
+
+
+def calculate_backoff_delay(attempt: int, base_delay: float, max_delay: float = 60.0) -> float:
+    """
+    计算指数退避延迟时间
+
+    使用指数退避算法计算重试延迟，避免频繁请求导致限流
+
+    Args:
+        attempt: 当前尝试次数（从0开始）
+        base_delay: 基础延迟时间（秒）
+        max_delay: 最大延迟时间（秒），默认60秒
+
+    Returns:
+        计算后的延迟时间（秒）
+
+    Example:
+        >>> calculate_backoff_delay(0, 2.0)
+        2.0
+        >>> calculate_backoff_delay(2, 2.0)
+        8.0
+        >>> calculate_backoff_delay(10, 2.0, max_delay=30.0)
+        30.0
+    """
+    if attempt <= 0:
+        return base_delay
+    delay = base_delay * (2 ** (attempt - 1))
+    return min(delay, max_delay)
