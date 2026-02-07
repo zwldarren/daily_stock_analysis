@@ -41,7 +41,7 @@ class ChannelDetector:
             NotificationChannel.PUSHPLUS: "PushPlus",
             NotificationChannel.SERVERCHAN3: "Server酱3",
             NotificationChannel.CUSTOM: "自定义Webhook",
-            NotificationChannel.DISCORD: "Discord机器人",
+            NotificationChannel.DISCORD: "Discord Webhook",
             NotificationChannel.ASTRBOT: "AstrBot",
             NotificationChannel.UNKNOWN: "未知渠道",
         }

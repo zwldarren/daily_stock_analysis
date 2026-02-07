@@ -71,7 +71,9 @@ def main(
 ) -> int:
     """A股自选股智能分析系统
 
-    示例:
+    Examples:
+
+        \b
         stock-analyzer                    # 正常运行
         stock-analyzer --debug            # 调试模式
         stock-analyzer --dry-run          # 仅获取数据，不进行 AI 分析

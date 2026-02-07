@@ -1,5 +1,6 @@
 """Pydantic Settings 配置管理"""
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any
@@ -9,7 +10,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _find_project_root() -> Path:
-    """查找项目根目录（包含 pyproject.toml 或 .env 的目录）"""
+    """查找项目根目录（包含 pyproject.toml 或 .env 的目录）
+
+    优先检查 PROJECT_ROOT 环境变量，用于 Docker 等场景
+    """
+    # 优先使用环境变量（Docker 场景）
+    env_root = os.environ.get("PROJECT_ROOT")
+    if env_root:
+        path = Path(env_root)
+        if path.exists():
+            return path.resolve()
+
+    # 自动查找（开发环境）
     current = Path(__file__).resolve()
     for parent in current.parents:
         if (parent / "pyproject.toml").exists() or (parent / ".env").exists():
@@ -99,7 +111,7 @@ class SearchConfig(BaseSettings):
     searxng_base_url: str = Field(default="", validation_alias="SEARXNG_BASE_URL")
     searxng_username: str | None = Field(default=None, validation_alias="SEARXNG_USERNAME")
     searxng_password: str | None = Field(default=None, validation_alias="SEARXNG_PASSWORD")
-    searxng_priority: int = Field(default=5, ge=0, le=100, validation_alias="SEARXNG_PRIORITY")
+    searxng_priority: int = Field(default=1, ge=0, le=100, validation_alias="SEARXNG_PRIORITY")
 
     @computed_field
     @property
