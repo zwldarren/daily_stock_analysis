@@ -95,6 +95,12 @@ class SearchConfig(BaseSettings):
     brave_api_keys_str: str = Field(default="", validation_alias="BRAVE_API_KEYS")
     serpapi_keys_str: str = Field(default="", validation_alias="SERPAPI_API_KEYS")
 
+    # SearXNG 配置
+    searxng_base_url: str = Field(default="", validation_alias="SEARXNG_BASE_URL")
+    searxng_username: str | None = Field(default=None, validation_alias="SEARXNG_USERNAME")
+    searxng_password: str | None = Field(default=None, validation_alias="SEARXNG_PASSWORD")
+    searxng_priority: int = Field(default=5, ge=0, le=100, validation_alias="SEARXNG_PRIORITY")
+
     @computed_field
     @property
     def bocha_api_keys(self) -> list[str]:
@@ -382,8 +388,9 @@ class Config(BaseSettings):
             and not self.search.tavily_api_keys
             and not self.search.brave_api_keys
             and not self.search.serpapi_keys
+            and not self.search.searxng_base_url
         ):
-            warnings_list.append("提示：未配置搜索引擎 API Key (Bocha/Tavily/Brave/SerpAPI)，新闻搜索功能将不可用")
+            warnings_list.append("提示：未配置任何搜索引擎，新闻搜索功能将不可用")
 
         # 检查通知配置
         has_notification = (

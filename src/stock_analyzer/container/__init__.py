@@ -86,7 +86,12 @@ class ServiceContainer(containers.DeclarativeContainer):
         SearchService,
         bocha_keys=infrastructure.config.provided.search.bocha_api_keys,
         tavily_keys=infrastructure.config.provided.search.tavily_api_keys,
+        brave_keys=infrastructure.config.provided.search.brave_api_keys,
         serpapi_keys=infrastructure.config.provided.search.serpapi_keys,
+        searxng_base_url=infrastructure.config.provided.search.searxng_base_url,
+        searxng_username=infrastructure.config.provided.search.searxng_username,
+        searxng_password=infrastructure.config.provided.search.searxng_password,
+        searxng_priority=infrastructure.config.provided.search.searxng_priority,
     )
 
 

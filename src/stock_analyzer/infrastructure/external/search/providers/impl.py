@@ -1,154 +1,51 @@
 """
-搜索引擎提供者
+Search engine implementations.
 
-实现各种搜索引擎的提供者
+All concrete search engine provider implementations.
 """
 
 import logging
-import time
-from abc import ABC, abstractmethod
-from itertools import cycle
+from datetime import datetime
 from urllib.parse import urlparse
 
 import requests
 
 from stock_analyzer.domain.models import SearchResponse, SearchResult
+from stock_analyzer.infrastructure.external.search.providers.base import (
+    ApiKeyProviderConfig,
+    ApiKeySearchProvider,
+    BaseSearchProvider,
+    SearxngProviderConfig,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class BaseSearchProvider(ABC):
-    """搜索引擎基类"""
-
-    def __init__(self, api_keys: list[str], name: str):
-        """
-        初始化搜索引擎
-
-        Args:
-            api_keys: API Key 列表（支持多个 key 负载均衡）
-            name: 搜索引擎名称
-        """
-        self._api_keys = api_keys
-        self._name = name
-        self._key_cycle = cycle(api_keys) if api_keys else None
-        self._key_usage: dict[str, int] = {key: 0 for key in api_keys}
-        self._key_errors: dict[str, int] = {key: 0 for key in api_keys}
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def is_available(self) -> bool:
-        """检查是否有可用的 API Key"""
-        return bool(self._api_keys)
-
-    def _get_next_key(self) -> str | None:
-        """
-        获取下一个可用的 API Key（负载均衡）
-
-        策略：轮询 + 跳过错误过多的 key
-        """
-        if not self._key_cycle:
-            return None
-
-        # 最多尝试所有 key
-        for _ in range(len(self._api_keys)):
-            key = next(self._key_cycle)
-            # 跳过错误次数过多的 key（超过 3 次）
-            if self._key_errors.get(key, 0) < 3:
-                return key
-
-        # 所有 key 都有问题，重置错误计数并返回第一个
-        logger.warning(f"[{self._name}] 所有 API Key 都有错误记录，重置错误计数")
-        self._key_errors = {key: 0 for key in self._api_keys}
-        return self._api_keys[0] if self._api_keys else None
-
-    def _record_success(self, key: str) -> None:
-        """记录成功使用"""
-        self._key_usage[key] = self._key_usage.get(key, 0) + 1
-        # 成功后减少错误计数
-        if key in self._key_errors and self._key_errors[key] > 0:
-            self._key_errors[key] -= 1
-
-    def _record_error(self, key: str) -> None:
-        """记录错误"""
-        self._key_errors[key] = self._key_errors.get(key, 0) + 1
-        logger.warning(f"[{self._name}] API Key {key[:8]}... 错误计数: {self._key_errors[key]}")
-
-    @abstractmethod
-    def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
-        """执行搜索（子类实现）"""
-        pass
-
-    def search(self, query: str, max_results: int = 5, days: int = 7) -> SearchResponse:
-        """
-        执行搜索
-
-        Args:
-            query: 搜索关键词
-            max_results: 最大返回结果数
-            days: 搜索最近几天的时间范围（默认7天）
-
-        Returns:
-            SearchResponse 对象
-        """
-        api_key = self._get_next_key()
-        if not api_key:
-            return SearchResponse(
-                query=query,
-                results=[],
-                provider=self._name,
-                success=False,
-                error_message=f"{self._name} 未配置 API Key",
-            )
-
-        start_time = time.time()
-        try:
-            response = self._do_search(query, api_key, max_results, days=days)
-            response.search_time = time.time() - start_time
-
-            if response.success:
-                self._record_success(api_key)
-                logger.info(
-                    f"[{self._name}] 搜索 '{query}' 成功，"
-                    f"返回 {len(response.results)} 条结果，"
-                    f"耗时 {response.search_time:.2f}s"
-                )
-            else:
-                self._record_error(api_key)
-
-            return response
-
-        except Exception as e:
-            self._record_error(api_key)
-            elapsed = time.time() - start_time
-            logger.error(f"[{self._name}] 搜索 '{query}' 失败: {e}")
-            return SearchResponse(
-                query=query,
-                results=[],
-                provider=self._name,
-                success=False,
-                error_message=str(e),
-                search_time=elapsed,
-            )
+def _extract_domain(url: str) -> str:
+    """Extract domain from URL as source."""
+    try:
+        parsed = urlparse(url)
+        domain = parsed.netloc.replace("www.", "")
+        return domain or "未知来源"
+    except Exception:
+        return "未知来源"
 
 
-class TavilySearchProvider(BaseSearchProvider):
+class TavilySearchProvider(ApiKeySearchProvider):
     """
-    Tavily 搜索引擎
+    Tavily Search Engine.
 
-    特点：
-    - 专为 AI/LLM 优化的搜索 API
-    - 免费版每月 1000 次请求
-    - 返回结构化的搜索结果
+    Features:
+    - AI/LLM optimized search API
+    - 1000 requests/month on free tier
+    - Returns structured search results
     """
 
-    def __init__(self, api_keys: list[str]):
-        super().__init__(api_keys, "Tavily")
+    def __init__(self, config: ApiKeyProviderConfig):
+        super().__init__(config, "Tavily")
 
-    def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
-        """执行 Tavily 搜索"""
+    def _do_search_with_key(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
+        """Execute Tavily search."""
         try:
             from tavily import TavilyClient
         except ImportError:
@@ -157,7 +54,7 @@ class TavilySearchProvider(BaseSearchProvider):
                 results=[],
                 provider=self.name,
                 success=False,
-                error_message="tavily-python 未安装，请运行: pip install tavily-python",
+                error_message="tavily-python not installed, run: pip install tavily-python",
             )
 
         try:
@@ -181,7 +78,7 @@ class TavilySearchProvider(BaseSearchProvider):
                         title=item.get("title", ""),
                         snippet=item.get("content", "")[:500],
                         url=item.get("url", ""),
-                        source=self._extract_domain(item.get("url", "")),
+                        source=_extract_domain(item.get("url", "")),
                         published_date=item.get("published_date"),
                     )
                 )
@@ -200,31 +97,21 @@ class TavilySearchProvider(BaseSearchProvider):
 
             return SearchResponse(query=query, results=[], provider=self.name, success=False, error_message=error_msg)
 
-    @staticmethod
-    def _extract_domain(url: str) -> str:
-        """从 URL 提取域名作为来源"""
-        try:
-            parsed = urlparse(url)
-            domain = parsed.netloc.replace("www.", "")
-            return domain or "未知来源"
-        except Exception:
-            return "未知来源"
 
-
-class SerpAPISearchProvider(BaseSearchProvider):
+class SerpAPISearchProvider(ApiKeySearchProvider):
     """
-    SerpAPI 搜索引擎
+    SerpAPI Search Engine.
 
-    特点：
-    - 支持 Google、Bing、百度等多种搜索引擎
-    - 免费版每月 100 次请求
+    Features:
+    - Supports Google, Bing, Baidu, and other search engines
+    - 100 requests/month on free tier
     """
 
-    def __init__(self, api_keys: list[str]):
-        super().__init__(api_keys, "SerpAPI")
+    def __init__(self, config: ApiKeyProviderConfig):
+        super().__init__(config, "SerpAPI")
 
-    def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
-        """执行 SerpAPI 搜索"""
+    def _do_search_with_key(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
+        """Execute SerpAPI search."""
         try:
             from serpapi import GoogleSearch
         except ImportError:
@@ -233,7 +120,7 @@ class SerpAPISearchProvider(BaseSearchProvider):
                 results=[],
                 provider=self.name,
                 success=False,
-                error_message="google-search-results 未安装，请运行: pip install google-search-results",
+                error_message="google-search-results not installed, run: pip install google-search-results",
             )
 
         try:
@@ -301,7 +188,7 @@ class SerpAPISearchProvider(BaseSearchProvider):
                         title=item.get("title", ""),
                         snippet=snippet[:1000],
                         url=link,
-                        source=item.get("source", self._extract_domain(link)),
+                        source=item.get("source", _extract_domain(link)),
                         published_date=item.get("date"),
                     )
                 )
@@ -317,43 +204,34 @@ class SerpAPISearchProvider(BaseSearchProvider):
             error_msg = str(e)
             return SearchResponse(query=query, results=[], provider=self.name, success=False, error_message=error_msg)
 
-    @staticmethod
-    def _extract_domain(url: str) -> str:
-        """从 URL 提取域名"""
-        try:
-            parsed = urlparse(url)
-            return parsed.netloc.replace("www.", "") or "未知来源"
-        except Exception:
-            return "未知来源"
 
-
-class BraveSearchProvider(BaseSearchProvider):
+class BraveSearchProvider(ApiKeySearchProvider):
     """
-    Brave Search 搜索引擎
+    Brave Search Engine.
 
-    特点：
-    - 隐私优先的独立搜索引擎
-    - 索引超过300亿页面
-    - 免费层可用
-    - 支持时间范围过滤
+    Features:
+    - Privacy-first independent search engine
+    - Index of over 30 billion pages
+    - Free tier available
+    - Supports time range filtering
 
-    文档：https://brave.com/search/api/
+    Docs: https://brave.com/search/api/
     """
 
     API_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 
-    def __init__(self, api_keys: list[str]):
-        super().__init__(api_keys, "Brave")
+    def __init__(self, config: ApiKeyProviderConfig):
+        super().__init__(config, "Brave")
 
-    def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
-        """执行 Brave 搜索"""
+    def _do_search_with_key(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
+        """Execute Brave search."""
         try:
             # 请求头
             headers = {"X-Subscription-Token": api_key, "Accept": "application/json"}
 
             # 确定时间范围（freshness 参数）
             if days <= 1:
-                freshness = "pd"  # Past day (24小时)
+                freshness = "pd"  # Past day (24 hours)
             elif days <= 7:
                 freshness = "pw"  # Past week
             elif days <= 30:
@@ -364,10 +242,10 @@ class BraveSearchProvider(BaseSearchProvider):
             # 请求参数
             params = {
                 "q": query,
-                "count": min(max_results, 20),  # Brave 最大支持20条
+                "count": min(max_results, 20),  # Brave max 20 results
                 "freshness": freshness,
-                "search_lang": "en",  # 英文内容（US股票优先）
-                "country": "US",  # 美国区域偏好
+                "search_lang": "en",  # English content (US stocks preferred)
+                "country": "US",  # US region preference
                 "safesearch": "moderate",
             }
 
@@ -406,20 +284,17 @@ class BraveSearchProvider(BaseSearchProvider):
                 age = item.get("age") or item.get("page_age")
                 if age:
                     try:
-                        # 转换 ISO 格式为简单日期字符串
-                        from datetime import datetime
-
                         dt = datetime.fromisoformat(age.replace("Z", "+00:00"))
                         published_date = dt.strftime("%Y-%m-%d")
                     except ValueError, AttributeError:
-                        published_date = age  # 解析失败时使用原始值
+                        published_date = age  # Use original value on parse failure
 
                 results.append(
                     SearchResult(
                         title=item.get("title", ""),
-                        snippet=item.get("description", "")[:500],  # 截取到500字符
+                        snippet=item.get("description", "")[:500],  # Truncate to 500 chars
                         url=item.get("url", ""),
-                        source=self._extract_domain(item.get("url", "")),
+                        source=_extract_domain(item.get("url", "")),
                         published_date=published_date,
                     )
                 )
@@ -442,11 +317,11 @@ class BraveSearchProvider(BaseSearchProvider):
             return SearchResponse(query=query, results=[], provider=self.name, success=False, error_message=error_msg)
 
     def _parse_error(self, response) -> str:
-        """解析错误响应"""
+        """Parse error response."""
         try:
             if response.headers.get("content-type", "").startswith("application/json"):
                 error_data = response.json()
-                # Brave API 返回的错误格式
+                # Brave API error format
                 if "message" in error_data:
                     return error_data["message"]
                 if "error" in error_data:
@@ -456,32 +331,22 @@ class BraveSearchProvider(BaseSearchProvider):
         except Exception:
             return f"HTTP {response.status_code}: {response.text[:200]}"
 
-    @staticmethod
-    def _extract_domain(url: str) -> str:
-        """从 URL 提取域名作为来源"""
-        try:
-            parsed = urlparse(url)
-            domain = parsed.netloc.replace("www.", "")
-            return domain or "未知来源"
-        except Exception:
-            return "未知来源"
 
-
-class BochaSearchProvider(BaseSearchProvider):
+class BochaSearchProvider(ApiKeySearchProvider):
     """
-    博查搜索引擎
+    Bocha Search Engine.
 
-    特点：
-    - 专为AI优化的中文搜索API
-    - 结果准确、摘要完整
-    - 支持时间范围过滤和AI摘要
+    Features:
+    - AI-optimized Chinese search API
+    - Accurate results with complete abstracts
+    - Supports time range filtering and AI summaries
     """
 
-    def __init__(self, api_keys: list[str]):
-        super().__init__(api_keys, "Bocha")
+    def __init__(self, config: ApiKeyProviderConfig):
+        super().__init__(config, "Bocha")
 
-    def _do_search(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
-        """执行博查搜索"""
+    def _do_search_with_key(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
+        """Execute Bocha search."""
         try:
             # 确定时间范围
             freshness = "oneWeek"
@@ -558,7 +423,7 @@ class BochaSearchProvider(BaseSearchProvider):
                         title=item.get("name", ""),
                         snippet=snippet,
                         url=item.get("url", ""),
-                        source=item.get("siteName") or self._extract_domain(item.get("url", "")),
+                        source=item.get("siteName") or _extract_domain(item.get("url", "")),
                         published_date=item.get("datePublished"),
                     )
                 )
@@ -581,12 +446,161 @@ class BochaSearchProvider(BaseSearchProvider):
                 query=query, results=[], provider=self.name, success=False, error_message=f"未知错误: {str(e)}"
             )
 
-    @staticmethod
-    def _extract_domain(url: str) -> str:
-        """从 URL 提取域名作为来源"""
+
+class SearxngSearchProvider(BaseSearchProvider):
+    """
+    Searxng Search Engine.
+
+    Features:
+    - Open-source meta search engine, privacy-respecting
+    - Supports self-hosted instances
+    - Supports Basic Auth authentication
+    - Can aggregate results from multiple search engines
+
+    Docs: https://docs.searxng.org/
+    """
+
+    config_class = SearxngProviderConfig
+
+    def __init__(self, config: SearxngProviderConfig):
+        super().__init__(config, "Searxng")
+        self._base_url = config.base_url.rstrip("/")
+        self._username = config.username
+        self._password = config.password
+
+    @property
+    def is_available(self) -> bool:
+        """Check if the provider is available."""
+        return bool(self._base_url) and self._config.enabled
+
+    def _get_auth(self) -> tuple[str, str] | None:
+        """Get Basic Auth credentials."""
+        if self._username and self._password:
+            return (self._username, self._password)
+        return None
+
+    def _do_search(self, query: str, max_results: int, days: int = 7) -> SearchResponse:
+        """Execute Searxng search."""
         try:
-            parsed = urlparse(url)
-            domain = parsed.netloc.replace("www.", "")
-            return domain or "未知来源"
-        except Exception:
-            return "未知来源"
+            # 构建搜索URL
+            search_url = f"{self._base_url}/search"
+
+            # 确定时间范围
+            time_range = "week"
+            if days <= 1:
+                time_range = "day"
+            elif days <= 7:
+                time_range = "week"
+            elif days <= 30:
+                time_range = "month"
+            else:
+                time_range = "year"
+
+            # 请求参数
+            params = {
+                "q": query,
+                "format": "json",
+                "language": "zh-CN",
+                "time_range": time_range,
+                "safesearch": "0",
+                "pageno": "1",
+            }
+
+            # 准备请求参数
+            request_kwargs = {
+                "params": params,
+                "timeout": 15,
+                "headers": {
+                    "Accept": "application/json",
+                    "User-Agent": "StockAnalyzer/1.0",
+                },
+            }
+
+            # 添加Basic Auth
+            auth = self._get_auth()
+            if auth:
+                request_kwargs["auth"] = auth
+                logger.debug("[Searxng] 使用Basic Auth认证")
+
+            # 执行搜索
+            response = requests.get(search_url, **request_kwargs)
+
+            # 检查HTTP状态码
+            if response.status_code == 401:
+                return SearchResponse(
+                    query=query,
+                    results=[],
+                    provider=self.name,
+                    success=False,
+                    error_message="Searxng 认证失败，请检查用户名和密码",
+                )
+
+            if response.status_code != 200:
+                error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                logger.warning(f"[Searxng] 搜索失败: {error_msg}")
+                return SearchResponse(
+                    query=query, results=[], provider=self.name, success=False, error_message=error_msg
+                )
+
+            # 解析响应
+            try:
+                data = response.json()
+            except ValueError as e:
+                error_msg = f"响应JSON解析失败: {str(e)}"
+                logger.error(f"[Searxng] {error_msg}")
+                return SearchResponse(
+                    query=query, results=[], provider=self.name, success=False, error_message=error_msg
+                )
+
+            logger.info(f"[Searxng] 搜索完成，query='{query}'")
+            logger.debug(f"[Searxng] 原始响应: {data}")
+
+            # 解析搜索结果
+            results = []
+            search_results = data.get("results", [])
+
+            for item in search_results[:max_results]:
+                # 解析发布日期
+                published_date = None
+                published_str = item.get("publishedDate") or item.get("published")
+                if published_str:
+                    try:
+                        # 尝试多种日期格式
+                        for fmt in ["%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%a, %d %b %Y %H:%M:%S"]:
+                            try:
+                                dt = datetime.strptime(published_str, fmt)
+                                published_date = dt.strftime("%Y-%m-%d")
+                                break
+                            except ValueError:
+                                continue
+                        if not published_date:
+                            published_date = published_str[:10]  # Take first 10 chars as date
+                    except Exception:
+                        published_date = published_str
+
+                results.append(
+                    SearchResult(
+                        title=item.get("title", ""),
+                        snippet=item.get("content", "")[:500],
+                        url=item.get("url", ""),
+                        source=item.get("source") or _extract_domain(item.get("url", "")),
+                        published_date=published_date,
+                    )
+                )
+
+            logger.info(f"[Searxng] 成功解析 {len(results)} 条结果")
+
+            return SearchResponse(query=query, results=results, provider=self.name, success=True)
+
+        except requests.exceptions.Timeout:
+            error_msg = "请求超时"
+            logger.error(f"[Searxng] {error_msg}")
+            return SearchResponse(query=query, results=[], provider=self.name, success=False, error_message=error_msg)
+        except requests.exceptions.RequestException as e:
+            error_msg = f"网络请求失败: {str(e)}"
+            logger.error(f"[Searxng] {error_msg}")
+            return SearchResponse(query=query, results=[], provider=self.name, success=False, error_message=error_msg)
+        except Exception as e:
+            error_msg = f"未知错误: {str(e)}"
+            logger.error(f"[Searxng] {error_msg}")
+            return SearchResponse(query=query, results=[], provider=self.name, success=False, error_message=error_msg)

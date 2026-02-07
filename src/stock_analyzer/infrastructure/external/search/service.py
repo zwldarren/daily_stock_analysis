@@ -1,7 +1,7 @@
 """
-搜索服务
+Search service.
 
-提供统一的搜索服务接口，管理多个搜索引擎和搜索策略
+Provides a unified search service interface, managing multiple search engines and search strategies.
 """
 
 import logging
@@ -13,11 +13,9 @@ from typing import Any
 from stock_analyzer.domain.models import SearchResponse
 from stock_analyzer.domain.services.interfaces import ISearchService
 from stock_analyzer.infrastructure.external.search.providers import (
-    BaseSearchProvider,
-    BochaSearchProvider,
-    BraveSearchProvider,
-    SerpAPISearchProvider,
-    TavilySearchProvider,
+    ApiKeyProviderConfig,
+    ProviderRegistry,
+    SearxngProviderConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,16 +23,16 @@ logger = logging.getLogger(__name__)
 
 class SearchService(ISearchService):
     """
-    搜索服务
+    Search service.
 
-    功能：
-    1. 管理多个搜索引擎
-    2. 自动故障转移
-    3. 结果聚合和格式化
-    4. 港股/美股自动使用英文搜索关键词
+    Features:
+    1. Manages multiple search engines
+    2. Automatic failover
+    3. Result aggregation and formatting
+    4. Automatic English keywords for HK/US stocks
     """
 
-    # 增强搜索关键词模板（A股 中文）
+    # Enhanced search keyword templates (A-share Chinese)
     ENHANCED_SEARCH_KEYWORDS = [
         "{name} 股票 今日 股价",
         "{name} {code} 最新 行情 走势",
@@ -43,7 +41,7 @@ class SearchService(ISearchService):
         "{name} {code} 涨跌 成交量",
     ]
 
-    # 增强搜索关键词模板（港股/美股 英文）
+    # Enhanced search keyword templates (HK/US stocks English)
     ENHANCED_SEARCH_KEYWORDS_EN = [
         "{name} stock price today",
         "{name} {code} latest quote trend",
@@ -58,50 +56,80 @@ class SearchService(ISearchService):
         tavily_keys: list[str] | None = None,
         brave_keys: list[str] | None = None,
         serpapi_keys: list[str] | None = None,
+        searxng_base_url: str = "",
+        searxng_username: str | None = None,
+        searxng_password: str | None = None,
+        searxng_priority: int = 1,
     ):
         """
-        初始化搜索服务
+        Initialize the search service.
 
         Args:
-            bocha_keys: 博查搜索 API Key 列表
-            tavily_keys: Tavily API Key 列表
-            brave_keys: Brave Search API Key 列表
-            serpapi_keys: SerpAPI Key 列表
+            bocha_keys: List of Bocha search API keys.
+            tavily_keys: List of Tavily API keys.
+            brave_keys: List of Brave Search API keys.
+            serpapi_keys: List of SerpAPI keys.
+            searxng_base_url: Searxng base URL.
+            searxng_username: Searxng Basic Auth username.
+            searxng_password: Searxng Basic Auth password.
+            searxng_priority: Searxng priority (default: 1 for highest).
         """
-        self._providers: list[BaseSearchProvider] = []
+        self._providers = []
 
-        # 初始化搜索引擎（按优先级排序）
-        # 1. Bocha 优先（中文搜索优化，AI摘要）
-        if bocha_keys:
-            self._providers.append(BochaSearchProvider(bocha_keys))
-            logger.info(f"已配置 Bocha 搜索，共 {len(bocha_keys)} 个 API Key")
+        # Use registry to create providers, sorted by priority
+        provider_configs = []
 
-        # 2. Tavily（免费额度更多，每月 1000 次）
+        # 1. SearXNG (self-hosted, completely free, highest priority)
+        if searxng_base_url:
+            provider_configs.append(
+                (
+                    searxng_priority,
+                    "searxng",
+                    SearxngProviderConfig(
+                        base_url=searxng_base_url,
+                        username=searxng_username,
+                        password=searxng_password,
+                        priority=searxng_priority,
+                    ),
+                )
+            )
+
+        # 2. Tavily (1000 requests/month free tier)
         if tavily_keys:
-            self._providers.append(TavilySearchProvider(tavily_keys))
-            logger.info(f"已配置 Tavily 搜索，共 {len(tavily_keys)} 个 API Key")
+            provider_configs.append((2, "tavily", ApiKeyProviderConfig(api_keys=tavily_keys, priority=2)))
 
-        # 3. Brave Search（隐私优先，全球覆盖）
+        # 3. Brave Search (free tier available)
         if brave_keys:
-            self._providers.append(BraveSearchProvider(brave_keys))
-            logger.info(f"已配置 Brave 搜索，共 {len(brave_keys)} 个 API Key")
+            provider_configs.append((3, "brave", ApiKeyProviderConfig(api_keys=brave_keys, priority=3)))
 
-        # 4. SerpAPI 作为备选（每月 100 次）
+        # 4. SerpAPI (100 requests/month free tier)
         if serpapi_keys:
-            self._providers.append(SerpAPISearchProvider(serpapi_keys))
-            logger.info(f"已配置 SerpAPI 搜索，共 {len(serpapi_keys)} 个 API Key")
+            provider_configs.append((4, "serpapi", ApiKeyProviderConfig(api_keys=serpapi_keys, priority=4)))
 
-        if not self._providers:
-            logger.warning("未配置任何搜索引擎 API Key，新闻搜索功能将不可用")
+        # 5. Bocha (paid only, Chinese optimized)
+        if bocha_keys:
+            provider_configs.append((5, "bocha", ApiKeyProviderConfig(api_keys=bocha_keys, priority=5)))
+
+        # Sort by priority and create providers
+        provider_configs.sort(key=lambda x: x[0])
+
+        for _priority, name, config in provider_configs:
+            provider = ProviderRegistry.create_provider(name, config)
+            if provider:
+                self._providers.append(provider)
+                if hasattr(config, "api_keys") and config.api_keys:
+                    logger.info(f"已配置 {name} 搜索，共 {len(config.api_keys)} 个 API Key")
+                else:
+                    logger.info(f"已配置 {name} 搜索")
 
     @staticmethod
     def _is_foreign_stock(stock_code: str) -> bool:
-        """判断是否为港股或美股"""
+        """Check if the stock is HK or US stock."""
         code = stock_code.strip()
-        # 美股：1-5个大写字母，可能包含点（如 BRK.B）
+        # US stocks: 1-5 uppercase letters, may contain dot (e.g., BRK.B)
         if re.match(r"^[A-Za-z]{1,5}(\.[A-Za-z])?$", code):
             return True
-        # 港股：带 hk 前缀或 5位纯数字
+        # HK stocks: starts with 'hk' prefix or 5-digit number
         lower = code.lower()
         if lower.startswith("hk"):
             return True
@@ -109,7 +137,7 @@ class SearchService(ISearchService):
 
     @property
     def is_available(self) -> bool:
-        """检查是否有可用的搜索引擎"""
+        """Check if any search engine is available."""
         return any(p.is_available for p in self._providers)
 
     def search_stock_news(
@@ -120,40 +148,40 @@ class SearchService(ISearchService):
         focus_keywords: list[str] | None = None,
     ) -> SearchResponse:
         """
-        搜索股票相关新闻
+        Search for stock-related news.
 
         Args:
-            stock_code: 股票代码
-            stock_name: 股票名称
-            max_results: 最大返回结果数
-            focus_keywords: 重点关注的关键词列表
+            stock_code: Stock code.
+            stock_name: Stock name.
+            max_results: Maximum number of results to return.
+            focus_keywords: List of keywords to focus on.
 
         Returns:
-            SearchResponse 对象
+            SearchResponse object.
         """
-        # 智能确定搜索时间范围
+        # Smart time range determination
         today_weekday = datetime.now().weekday()
-        if today_weekday == 0:  # 周一
+        if today_weekday == 0:  # Monday
             search_days = 3
-        elif today_weekday >= 5:  # 周六(5)、周日(6)
+        elif today_weekday >= 5:  # Saturday(5), Sunday(6)
             search_days = 2
-        else:  # 周二(1) - 周五(4)
+        else:  # Tuesday(1) - Friday(4)
             search_days = 1
 
-        # 构建搜索查询（根据股票类型选择语言）
+        # Build search query (select language based on stock type)
         is_foreign = self._is_foreign_stock(stock_code)
         if focus_keywords:
             query = " ".join(focus_keywords)
         elif is_foreign:
-            # 港股/美股使用英文搜索关键词
+            # Use English keywords for HK/US stocks
             query = f"{stock_name} {stock_code} stock latest news"
         else:
-            # A股使用中文搜索关键词
+            # Use Chinese keywords for A-shares
             query = f"{stock_name} {stock_code} 股票 最新消息"
 
         logger.info(f"搜索股票新闻: {stock_name}({stock_code}), query='{query}', 时间范围: 近{search_days}天")
 
-        # 依次尝试各个搜索引擎
+        # Try each search engine in order
         for provider in self._providers:
             if not provider.is_available:
                 continue
@@ -166,7 +194,7 @@ class SearchService(ISearchService):
             else:
                 logger.warning(f"{provider.name} 搜索失败: {response.error_message}，尝试下一个引擎")
 
-        # 所有引擎都失败
+        # All engines failed
         return SearchResponse(
             query=query,
             results=[],
@@ -179,20 +207,20 @@ class SearchService(ISearchService):
         self, stock_code: str, stock_name: str, max_searches: int = 3
     ) -> dict[str, SearchResponse]:
         """
-        多维度情报搜索
+        Multi-dimensional intelligence search.
 
-        搜索维度：
-        1. 最新消息 - 近期新闻动态
-        2. 风险排查 - 减持、处罚、利空
-        3. 业绩预期 - 年报预告、业绩快报
+        Search dimensions:
+        1. Latest news - Recent news and events
+        2. Risk check - Reductions, penalties, negative news
+        3. Earnings expectations - Annual report forecasts, performance bulletins
         """
         results = {}
         search_count = 0
 
-        # 根据股票类型选择搜索关键词语言
+        # Select search keyword language based on stock type
         is_foreign = self._is_foreign_stock(stock_code)
 
-        # 定义搜索维度
+        # Define search dimensions
         if is_foreign:
             search_dimensions = [
                 {
@@ -252,8 +280,7 @@ class SearchService(ISearchService):
 
         logger.info(f"开始多维度情报搜索: {stock_name}({stock_code})")
 
-        # 轮流使用不同的搜索引擎
-        # 选择搜索引擎（轮流使用）
+        # Rotate through different search engines
         available_providers = [p for p in self._providers if p.is_available]
         if not available_providers:
             return results
@@ -274,18 +301,16 @@ class SearchService(ISearchService):
             else:
                 logger.warning(f"[情报搜索] {dim['desc']}: 搜索失败 - {response.error_message}")
 
-            # 短暂延迟避免请求过快
+            # Brief delay to avoid rate limiting
             time.sleep(0.5)
 
         return results
 
     def format_intel_report(self, intel_results: dict[str, SearchResponse], stock_name: str) -> str:
-        """
-        格式化情报搜索结果为报告
-        """
+        """Format intelligence search results into a report."""
         lines = [f"【{stock_name} 情报搜索结果】"]
 
-        # 维度展示顺序
+        # Dimension display order
         display_order = ["latest_news", "market_analysis", "risk_check", "earnings", "industry"]
 
         for dim_name in display_order:
@@ -294,7 +319,7 @@ class SearchService(ISearchService):
 
             resp = intel_results[dim_name]
 
-            # 获取维度描述
+            # Get dimension description
             dim_desc = dim_name
             if dim_name == "latest_news":
                 dim_desc = "📰 最新消息"
@@ -322,9 +347,7 @@ class SearchService(ISearchService):
     def search_stock_price_fallback(
         self, stock_code: str, stock_name: str, max_attempts: int = 3, max_results: int = 5
     ) -> SearchResponse:
-        """
-        Enhance search when data sources fail.
-        """
+        """Enhance search when data sources fail."""
         if not self.is_available:
             return SearchResponse(
                 query=f"{stock_name} 股价走势",
@@ -340,7 +363,7 @@ class SearchService(ISearchService):
         seen_urls = set()
         successful_providers = []
 
-        # 使用多个关键词模板搜索
+        # Search using multiple keyword templates
         is_foreign = self._is_foreign_stock(stock_code)
         keywords = self.ENHANCED_SEARCH_KEYWORDS_EN if is_foreign else self.ENHANCED_SEARCH_KEYWORDS
         for i, keyword_template in enumerate(keywords[:max_attempts]):
@@ -348,7 +371,7 @@ class SearchService(ISearchService):
 
             logger.info(f"[增强搜索] 第 {i + 1}/{max_attempts} 次搜索: {query}")
 
-            # 依次尝试各个搜索引擎
+            # Try each search engine in order
             for provider in self._providers:
                 if not provider.is_available:
                     continue
@@ -357,7 +380,7 @@ class SearchService(ISearchService):
                     response = provider.search(query, max_results=3)
 
                     if response.success and response.results:
-                        # 去重并添加结果
+                        # Deduplicate and add results
                         for result in response.results:
                             if result.url not in seen_urls:
                                 seen_urls.add(result.url)
@@ -373,11 +396,11 @@ class SearchService(ISearchService):
                     logger.warning(f"[增强搜索] {provider.name} 搜索异常: {e}")
                     continue
 
-            # 短暂延迟避免请求过快
+            # Brief delay between searches
             if i < max_attempts - 1:
                 time.sleep(0.5)
 
-        # 汇总结果
+        # Aggregate results
         if all_results:
             final_results = all_results[:max_results]
             provider_str = ", ".join(successful_providers) if successful_providers else "None"
@@ -402,16 +425,16 @@ class SearchService(ISearchService):
 
     def search_single_query(self, query: str, max_results: int = 10) -> dict[str, Any] | None:
         """
-        执行单次搜索查询
+        Execute a single search query.
 
         Args:
-            query: 搜索关键词
-            max_results: 最大结果数
+            query: Search query string.
+            max_results: Maximum number of results.
 
         Returns:
-            dict[str, Any] | None: 搜索结果字典，失败返回 None
+            dict[str, Any] | None: Search results dictionary, None on failure.
         """
-        # 依次尝试各个搜索引擎
+        # Try each search engine in order
         for provider in self._providers:
             if not provider.is_available:
                 continue
@@ -420,7 +443,7 @@ class SearchService(ISearchService):
                 response = provider.search(query, max_results)
 
                 if response.success and response.results:
-                    # 转换为字典格式返回
+                    # Convert to dictionary format
                     return {
                         "query": response.query,
                         "results": [
@@ -439,17 +462,17 @@ class SearchService(ISearchService):
                 logger.warning(f"[单次搜索] {provider.name} 搜索异常: {e}")
                 continue
 
-        # 所有引擎都失败
+        # All engines failed
         logger.warning(f"[单次搜索] 所有搜索引擎都失败: {query}")
         return None
 
 
-# === 便捷函数 ===
+# === Convenience functions ===
 _search_service: SearchService | None = None
 
 
 def get_search_service() -> SearchService:
-    """获取搜索服务单例"""
+    """Get the search service singleton."""
     global _search_service
 
     if _search_service is None:
@@ -462,12 +485,16 @@ def get_search_service() -> SearchService:
             tavily_keys=config.search.tavily_api_keys,
             brave_keys=config.search.brave_api_keys,
             serpapi_keys=config.search.serpapi_keys,
+            searxng_base_url=config.search.searxng_base_url,
+            searxng_username=config.search.searxng_username,
+            searxng_password=config.search.searxng_password,
+            searxng_priority=config.search.searxng_priority,
         )
 
     return _search_service
 
 
 def reset_search_service() -> None:
-    """重置搜索服务（用于测试）"""
+    """Reset the search service (for testing)."""
     global _search_service
     _search_service = None

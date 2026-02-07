@@ -20,24 +20,6 @@ ruff check --fix
 ty check .
 ```
 
-### Running Tests
-```bash
-# Run all tests
-pytest
-
-# Run single test file
-pytest tests/test_module.py
-
-# Run specific test
-pytest tests/test_module.py::test_function_name
-
-# Run with verbose output
-pytest -v
-
-# Run with coverage
-pytest --cov=stock_analyzer
-```
-
 ### Running the Application
 ```bash
 # Use uv run to execute (entry point is stock-analyzer command)
@@ -45,6 +27,8 @@ uv run stock-analyzer --help                    # See all options
 uv run stock-analyzer --stocks 600519           # Analyze single stock
 uv run stock-analyzer --market-review           # Market review only
 uv run stock-analyzer --dry-run --no-notify     # Test without AI/notifications
+uv run stock-analyzer --debug                   # Debug mode with verbose logs
+uv run stock-analyzer --schedule                # Enable scheduled execution
 ```
 
 ### Docker
@@ -92,6 +76,37 @@ docker run -it --env-file .env stock-analyzer
 - Constants: `UPPER_CASE`
 - Private methods: `_leading_underscore`
 
+### Error Handling
+- Use domain exceptions from `stock_analyzer.domain.exceptions`
+- Use `@handle_errors` decorator for graceful degradation
+- Use `safe_execute()` for safe function calls with defaults
+- **Exception Hierarchy**:
+  - `StockAnalyzerException` (base)
+    - `DataFetchError` (data fetching failures)
+      - `RateLimitError`, `DataSourceUnavailableError`
+    - `StorageError`, `ValidationError`, `AnalysisError`
+    - `NotificationError`, `ConfigurationError`
+- **Example**:
+  ```python
+  from stock_analyzer.domain.exceptions import handle_errors, DataFetchError
+
+  @handle_errors("获取股票数据失败", default_return=None)
+  def fetch_stock_data(code: str) -> dict | None:
+      # 可能抛出异常的代码
+      return api.get_data(code)
+  ```
+
+### Logging
+- Use appropriate levels: `logger.debug()`, `logger.info()`, `logger.warning()`, `logger.error()`
+- Include context in log messages (stock code, operation)
+- Logging messages should be Chinese for user-facing logs, English for developer/debug logs
+- **Example**:
+  ```python
+  logger.info(f"开始分析股票: {stock_code}")
+  logger.warning(f"数据源 {provider} 不可用，切换到备选")
+  logger.error(f"分析失败: {e}")
+  ```
+
 ### Documentation
 - **Docstrings**: Use triple quotes for modules, classes, and functions (English)
 - **Comments**: Use Chinese comments for inline explanations (project is bilingual)
@@ -122,27 +137,24 @@ docker run -it --env-file .env stock-analyzer
 - **API clients**: Support multiple providers (Gemini, OpenAI, DeepSeek)
 - **JSON parsing**: Use `json_repair` for handling LLM output
 - **Rate limiting**: Implement delays between API calls
-- **Prompts**: Stored as constants, version controlled
+- **Prompts**: Stored as constants in `ai/prompts.py`, version controlled
+- **Retry logic**: Use exponential backoff for API failures
 
-## Common Tasks
+## Testing Guidelines
 
-```bash
-# Add new data provider
-# 1. Create file in src/stock_analyzer/data_provider/
-# 2. Inherit from BaseFetcher
-# 3. Implement required methods
-# 4. Register in DataFetcherManager
+### Test Markers
+- `@pytest.mark.live`: Tests that call real data provider APIs (may consume quota)
+- `@pytest.mark.slow`: Tests that are slow to run
+- Use `pytest --run-live` to include live tests
+- Use `pytest -m "not slow"` to skip slow tests
 
-# Test a single stock analysis
-uv run stock-analyzer --stocks 600519 --no-notify --no-market-review
+### Test Structure
+- Unit tests: `tests/unit/`
+- Integration tests: `tests/integration/`
+- E2E tests: `tests/e2e/`
+- Fixtures: `tests/fixtures/`
 
-# Check code before commit
-ruff check . && ruff format . && ty check . && pytest
-```
-
-## Notes
-
-- Environment variables: See `.env.example` for all options
-- Supports A-shares, HK stocks, and US stocks
-- Uses multiple data sources for redundancy
-- Entry point: `uv run stock-analyzer` or `stock-analyzer` command
+### Writing Tests
+- Use descriptive test names: `test_rsi_calculation_with_valid_data`
+- Mock external APIs in unit tests
+- Use fixtures from `tests/conftest.py` for common setup

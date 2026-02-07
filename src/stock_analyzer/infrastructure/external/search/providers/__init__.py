@@ -1,34 +1,37 @@
 """
-Search service module.
+Search engine providers module.
 
-Provides a unified news search interface supporting multiple search engines.
+Provides base classes, configurations, and implementations for all search engine providers.
 """
 
-from stock_analyzer.domain.models import SearchResponse, SearchResult
-from stock_analyzer.infrastructure.external.search.providers import (
+from stock_analyzer.infrastructure.external.search.providers.base import (
     ApiKeyProviderConfig,
     ApiKeySearchProvider,
     BaseSearchProvider,
+    ProviderConfig,
+    SearxngProviderConfig,
+)
+from stock_analyzer.infrastructure.external.search.providers.impl import (
     BochaSearchProvider,
     BraveSearchProvider,
-    ProviderConfig,
-    ProviderRegistry,
-    SearxngProviderConfig,
     SearxngSearchProvider,
     SerpAPISearchProvider,
     TavilySearchProvider,
 )
-from stock_analyzer.infrastructure.external.search.service import SearchService, get_search_service
+from stock_analyzer.infrastructure.external.search.providers.registry import (
+    ProviderRegistry,
+    register_builtin_providers,
+)
+
+# Auto-register built-in providers on module import
+register_builtin_providers()
 
 __all__ = [
-    # Data models
-    "SearchResult",
-    "SearchResponse",
     # Configuration classes
     "ProviderConfig",
     "ApiKeyProviderConfig",
     "SearxngProviderConfig",
-    # Provider base classes
+    # Base classes
     "BaseSearchProvider",
     "ApiKeySearchProvider",
     # Provider implementations
@@ -39,7 +42,5 @@ __all__ = [
     "SearxngSearchProvider",
     # Registry
     "ProviderRegistry",
-    # Service
-    "SearchService",
-    "get_search_service",
+    "register_builtin_providers",
 ]
