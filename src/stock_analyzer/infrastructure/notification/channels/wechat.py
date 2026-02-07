@@ -68,6 +68,9 @@ class WechatChannel(NotificationChannelBase):
         def get_bytes(s: str) -> int:
             return len(s.encode("utf-8"))
 
+        # 根据消息类型动态限制上限，避免 text 类型超过企业微信 2048 字节限制
+        max_bytes = min(self.max_bytes, 2000) if self.msg_type == "text" else self.max_bytes
+
         # 智能分割：优先按 "---" 分隔
         if "\n---\n" in content:
             sections = content.split("\n---\n")
@@ -81,28 +84,34 @@ class WechatChannel(NotificationChannelBase):
             sections = [parts[0]] + [f"## {p}" for p in parts[1:]]
             separator = "\n"
         else:
-            return self._send_force_chunked(content)
+            return self._send_force_chunked(content, max_bytes)
 
         chunks = []
         current_chunk = []
         current_bytes = 0
         separator_bytes = get_bytes(separator)
+        effective_max_bytes = max_bytes - 50  # 预留分页标记空间，避免边界超限
 
         for section in sections:
             section_bytes = get_bytes(section) + separator_bytes
 
-            if section_bytes > self.max_bytes:
+            # 如果单个 section 就超长，需要强制截断
+            if section_bytes > effective_max_bytes:
+                # 先发送当前积累的内容
                 if current_chunk:
                     chunks.append(separator.join(current_chunk))
                     current_chunk = []
                     current_bytes = 0
 
-                truncated = self._truncate_to_bytes(section, self.max_bytes - 200)
+                # 强制截断这个超长 section（按字节截断）
+                truncated = self._truncate_to_bytes(section, effective_max_bytes - 200)
                 truncated += "\n\n...(本段内容过长已截断)"
                 chunks.append(truncated)
                 continue
 
-            if current_bytes + section_bytes > self.max_bytes:
+            # 检查加入后是否超长
+            if current_bytes + section_bytes > effective_max_bytes:
+                # 保存当前块，开始新块
                 if current_chunk:
                     chunks.append(separator.join(current_chunk))
                 current_chunk = [section]
@@ -141,15 +150,19 @@ class WechatChannel(NotificationChannelBase):
 
         return success_count == total_chunks
 
-    def _send_force_chunked(self, content: str) -> bool:
+    def _send_force_chunked(self, content: str, max_bytes: int | None = None) -> bool:
         """强制按字节分割发送"""
+        # 根据消息类型动态限制上限
+        if max_bytes is None:
+            max_bytes = min(self.max_bytes, 2000) if self.msg_type == "text" else self.max_bytes
+
         chunks = []
         current_chunk = ""
         lines = content.split("\n")
 
         for line in lines:
             test_chunk = current_chunk + ("\n" if current_chunk else "") + line
-            if len(test_chunk.encode("utf-8")) > self.max_bytes - 100:
+            if len(test_chunk.encode("utf-8")) > max_bytes - 100:
                 if current_chunk:
                     chunks.append(current_chunk)
                 current_chunk = line
