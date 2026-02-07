@@ -23,7 +23,6 @@ AkshareFetcher - 主数据源 (Priority 1)
 """
 
 import logging
-import os
 import random
 import time
 from typing import Any
@@ -165,7 +164,12 @@ class AkshareFetcher(BaseFetcher):
     """
 
     name = "AkshareFetcher"
-    priority = int(os.getenv("AKSHARE_PRIORITY", "1"))
+
+    @property
+    def priority(self) -> int:
+        from stock_analyzer.config import get_config
+
+        return get_config().datasource.akshare_priority
 
     def __init__(self, sleep_min: float = 2.0, sleep_max: float = 5.0):
         """

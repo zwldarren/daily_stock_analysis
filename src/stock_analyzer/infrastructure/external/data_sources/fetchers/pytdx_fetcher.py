@@ -14,7 +14,6 @@ PytdxFetcher - 通达信数据源 (Priority 2)
 """
 
 import logging
-import os
 import re
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -66,7 +65,12 @@ class PytdxFetcher(BaseFetcher):
     """
 
     name = "PytdxFetcher"
-    priority = int(os.getenv("PYTDX_PRIORITY", "2"))
+
+    @property
+    def priority(self) -> int:
+        from stock_analyzer.config import get_config
+
+        return get_config().datasource.pytdx_priority
 
     # 默认通达信行情服务器列表
     DEFAULT_HOSTS = [

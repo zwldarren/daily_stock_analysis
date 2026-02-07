@@ -14,7 +14,6 @@ TushareFetcher - 备用数据源 1 (Priority 2)
 """
 
 import logging
-import os
 import re
 import time
 from datetime import datetime
@@ -68,7 +67,22 @@ class TushareFetcher(BaseFetcher):
     """
 
     name = "TushareFetcher"
-    priority = int(os.getenv("TUSHARE_PRIORITY", "2"))  # 默认优先级，会在 __init__ 中根据配置动态调整
+
+    @property
+    def priority(self) -> int:
+        from stock_analyzer.config import get_config
+
+        config = get_config()
+
+        # 如果 API 未初始化，返回配置的优先级
+        if not hasattr(self, "_api") or self._api is None:
+            return config.datasource.tushare_priority
+
+        # Token 配置且 API 初始化成功，提升为最高优先级
+        if config.datasource.tushare_token and self._api is not None:
+            return -1
+
+        return config.datasource.tushare_priority
 
     def __init__(self, rate_limit_per_minute: int = 80):
         """
@@ -87,9 +101,6 @@ class TushareFetcher(BaseFetcher):
 
         # Initialize API
         self._init_api()
-
-        # Dynamically adjust priority based on API initialization result
-        self.priority = self._determine_priority()
 
     def _init_api(self) -> None:
         """
@@ -117,27 +128,6 @@ class TushareFetcher(BaseFetcher):
         except Exception as e:
             logger.error(f"Tushare API 初始化失败: {e}")
             self._api = None
-
-    def _determine_priority(self) -> int:
-        """
-        根据 Token 配置和 API 初始化状态确定优先级
-
-        策略：
-        - Token 配置且 API 初始化成功：优先级 -1（绝对最高，优于 efinance）
-        - 其他情况：优先级 2（默认）
-
-        Returns:
-            优先级数字（0=最高，数字越大优先级越低）
-        """
-        config = get_config()
-
-        if config.datasource.tushare_token and self._api is not None:
-            # Token 配置且 API 初始化成功，提升为最高优先级
-            logger.info("✅ 检测到 TUSHARE_TOKEN 且 API 初始化成功，Tushare 数据源优先级提升为最高 (Priority -1)")
-            return -1
-
-        # Token 未配置或 API 初始化失败，保持默认优先级
-        return 2
 
     def is_available(self) -> bool:
         """

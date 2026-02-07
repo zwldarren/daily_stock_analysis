@@ -28,17 +28,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import click
-
-# 代理配置 - 通过 USE_PROXY 环境变量控制，默认关闭
-# GitHub Actions 环境自动跳过代理配置
-if os.getenv("GITHUB_ACTIONS") != "true" and os.getenv("USE_PROXY", "false").lower() == "true":
-    # 本地开发环境，启用代理（可在 .env 中配置 PROXY_HOST 和 PROXY_PORT）
-    proxy_host = os.getenv("PROXY_HOST", "127.0.0.1")
-    proxy_port = os.getenv("PROXY_PORT", "10809")
-    proxy_url = f"http://{proxy_host}:{proxy_port}"
-    os.environ["http_proxy"] = proxy_url
-    os.environ["https_proxy"] = proxy_url
-
 from loguru import logger
 
 from stock_analyzer.infrastructure.external.feishu.doc_manager import FeishuDocManager
@@ -95,8 +84,20 @@ def main(
     # 加载配置（在设置日志前加载，以获取日志目录）
     config = get_config()
 
+    # 应用系统配置：代理设置
+    # GitHub Actions 环境自动跳过代理配置
+    if os.getenv("GITHUB_ACTIONS") != "true":
+        if config.system.http_proxy:
+            os.environ["http_proxy"] = config.system.http_proxy
+            logger.debug(f"已设置 http_proxy: {config.system.http_proxy}")
+        if config.system.https_proxy:
+            os.environ["https_proxy"] = config.system.https_proxy
+            logger.debug(f"已设置 https_proxy: {config.system.https_proxy}")
+
     # 配置日志（输出到控制台和文件）
-    setup_logging(debug=debug, log_dir=config.logging.log_dir)
+    # 命令行 --debug 参数优先，其次使用配置文件中的 debug 设置
+    effective_debug = debug or config.system.debug
+    setup_logging(debug=effective_debug, log_dir=config.logging.log_dir)
 
     logger.info("=" * 60)
     logger.info("A股自选股智能分析系统 启动")

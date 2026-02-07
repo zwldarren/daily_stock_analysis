@@ -14,7 +14,6 @@ YfinanceFetcher - 兜底数据源 (Priority 4)
 """
 
 import logging
-import os
 import re
 from typing import Any
 
@@ -52,7 +51,12 @@ class YfinanceFetcher(BaseFetcher):
     """
 
     name = "YfinanceFetcher"
-    priority = int(os.getenv("YFINANCE_PRIORITY", "4"))
+
+    @property
+    def priority(self) -> int:
+        from stock_analyzer.config import get_config
+
+        return get_config().datasource.yfinance_priority
 
     def __init__(self):
         """初始化 YfinanceFetcher"""

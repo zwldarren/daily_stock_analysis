@@ -14,7 +14,6 @@ BaostockFetcher - 备用数据源 2 (Priority 3)
 """
 
 import logging
-import os
 import re
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -65,7 +64,12 @@ class BaostockFetcher(BaseFetcher):
     """
 
     name = "BaostockFetcher"
-    priority = int(os.getenv("BAOSTOCK_PRIORITY", "3"))
+
+    @property
+    def priority(self) -> int:
+        from stock_analyzer.config import get_config
+
+        return get_config().datasource.baostock_priority
 
     def __init__(self):
         """Initialize BaostockFetcher."""

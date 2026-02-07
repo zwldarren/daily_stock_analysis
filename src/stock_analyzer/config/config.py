@@ -296,6 +296,14 @@ class DataSourceConfig(BaseSettings):
 
     tushare_token: str | None = Field(default=None, validation_alias="TUSHARE_TOKEN")
 
+    # 数据源优先级配置（数值越小优先级越高）
+    efinance_priority: int = Field(default=0, ge=0, le=10, validation_alias="EFINANCE_PRIORITY")
+    akshare_priority: int = Field(default=1, ge=0, le=10, validation_alias="AKSHARE_PRIORITY")
+    tushare_priority: int = Field(default=2, ge=0, le=10, validation_alias="TUSHARE_PRIORITY")
+    pytdx_priority: int = Field(default=2, ge=0, le=10, validation_alias="PYTDX_PRIORITY")
+    baostock_priority: int = Field(default=3, ge=0, le=10, validation_alias="BAOSTOCK_PRIORITY")
+    yfinance_priority: int = Field(default=4, ge=0, le=10, validation_alias="YFINANCE_PRIORITY")
+
 
 # ==========================================
 # 主配置类
