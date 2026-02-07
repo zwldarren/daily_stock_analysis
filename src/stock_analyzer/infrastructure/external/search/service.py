@@ -5,6 +5,7 @@
 """
 
 import logging
+import re
 import time
 from datetime import datetime
 from typing import Any
@@ -30,15 +31,25 @@ class SearchService(ISearchService):
     1. 管理多个搜索引擎
     2. 自动故障转移
     3. 结果聚合和格式化
+    4. 港股/美股自动使用英文搜索关键词
     """
 
-    # 增强搜索关键词模板
+    # 增强搜索关键词模板（A股 中文）
     ENHANCED_SEARCH_KEYWORDS = [
         "{name} 股票 今日 股价",
         "{name} {code} 最新 行情 走势",
         "{name} 股票 分析 走势图",
         "{name} K线 技术分析",
         "{name} {code} 涨跌 成交量",
+    ]
+
+    # 增强搜索关键词模板（港股/美股 英文）
+    ENHANCED_SEARCH_KEYWORDS_EN = [
+        "{name} stock price today",
+        "{name} {code} latest quote trend",
+        "{name} stock analysis chart",
+        "{name} technical analysis",
+        "{name} {code} performance volume",
     ]
 
     def __init__(
@@ -83,6 +94,19 @@ class SearchService(ISearchService):
         if not self._providers:
             logger.warning("未配置任何搜索引擎 API Key，新闻搜索功能将不可用")
 
+    @staticmethod
+    def _is_foreign_stock(stock_code: str) -> bool:
+        """判断是否为港股或美股"""
+        code = stock_code.strip()
+        # 美股：1-5个大写字母，可能包含点（如 BRK.B）
+        if re.match(r"^[A-Za-z]{1,5}(\.[A-Za-z])?$", code):
+            return True
+        # 港股：带 hk 前缀或 5位纯数字
+        lower = code.lower()
+        if lower.startswith("hk"):
+            return True
+        return bool(code.isdigit() and len(code) == 5)
+
     @property
     def is_available(self) -> bool:
         """检查是否有可用的搜索引擎"""
@@ -116,8 +140,16 @@ class SearchService(ISearchService):
         else:  # 周二(1) - 周五(4)
             search_days = 1
 
-        # 构建搜索查询
-        query = " ".join(focus_keywords) if focus_keywords else f"{stock_name} {stock_code} 股票 最新消息"
+        # 构建搜索查询（根据股票类型选择语言）
+        is_foreign = self._is_foreign_stock(stock_code)
+        if focus_keywords:
+            query = " ".join(focus_keywords)
+        elif is_foreign:
+            # 港股/美股使用英文搜索关键词
+            query = f"{stock_name} {stock_code} stock latest news"
+        else:
+            # A股使用中文搜索关键词
+            query = f"{stock_name} {stock_code} 股票 最新消息"
 
         logger.info(f"搜索股票新闻: {stock_name}({stock_code}), query='{query}', 时间范围: 近{search_days}天")
 
@@ -157,34 +189,66 @@ class SearchService(ISearchService):
         results = {}
         search_count = 0
 
+        # 根据股票类型选择搜索关键词语言
+        is_foreign = self._is_foreign_stock(stock_code)
+
         # 定义搜索维度
-        search_dimensions = [
-            {
-                "name": "latest_news",
-                "query": f"{stock_name} {stock_code} 最新 新闻 重大 事件",
-                "desc": "最新消息",
-            },
-            {
-                "name": "market_analysis",
-                "query": f"{stock_name} 研报 目标价 评级 深度分析",
-                "desc": "机构分析",
-            },
-            {
-                "name": "risk_check",
-                "query": f"{stock_name} 减持 处罚 违规 诉讼 利空 风险",
-                "desc": "风险排查",
-            },
-            {
-                "name": "earnings",
-                "query": f"{stock_name} 业绩预告 财报 营收 净利润 同比增长",
-                "desc": "业绩预期",
-            },
-            {
-                "name": "industry",
-                "query": f"{stock_name} 所在行业 竞争对手 市场份额 行业前景",
-                "desc": "行业分析",
-            },
-        ]
+        if is_foreign:
+            search_dimensions = [
+                {
+                    "name": "latest_news",
+                    "query": f"{stock_name} {stock_code} latest news events",
+                    "desc": "最新消息",
+                },
+                {
+                    "name": "market_analysis",
+                    "query": f"{stock_name} analyst rating target price report",
+                    "desc": "机构分析",
+                },
+                {
+                    "name": "risk_check",
+                    "query": f"{stock_name} risk insider selling lawsuit litigation",
+                    "desc": "风险排查",
+                },
+                {
+                    "name": "earnings",
+                    "query": f"{stock_name} earnings revenue profit growth forecast",
+                    "desc": "业绩预期",
+                },
+                {
+                    "name": "industry",
+                    "query": f"{stock_name} industry competitors market share outlook",
+                    "desc": "行业分析",
+                },
+            ]
+        else:
+            search_dimensions = [
+                {
+                    "name": "latest_news",
+                    "query": f"{stock_name} {stock_code} 最新 新闻 重大 事件",
+                    "desc": "最新消息",
+                },
+                {
+                    "name": "market_analysis",
+                    "query": f"{stock_name} 研报 目标价 评级 深度分析",
+                    "desc": "机构分析",
+                },
+                {
+                    "name": "risk_check",
+                    "query": f"{stock_name} 减持 处罚 违规 诉讼 利空 风险",
+                    "desc": "风险排查",
+                },
+                {
+                    "name": "earnings",
+                    "query": f"{stock_name} 业绩预告 财报 营收 净利润 同比增长",
+                    "desc": "业绩预期",
+                },
+                {
+                    "name": "industry",
+                    "query": f"{stock_name} 所在行业 竞争对手 市场份额 行业前景",
+                    "desc": "行业分析",
+                },
+            ]
 
         logger.info(f"开始多维度情报搜索: {stock_name}({stock_code})")
 
@@ -277,7 +341,9 @@ class SearchService(ISearchService):
         successful_providers = []
 
         # 使用多个关键词模板搜索
-        for i, keyword_template in enumerate(self.ENHANCED_SEARCH_KEYWORDS[:max_attempts]):
+        is_foreign = self._is_foreign_stock(stock_code)
+        keywords = self.ENHANCED_SEARCH_KEYWORDS_EN if is_foreign else self.ENHANCED_SEARCH_KEYWORDS
+        for i, keyword_template in enumerate(keywords[:max_attempts]):
             query = keyword_template.format(name=stock_name, code=stock_code)
 
             logger.info(f"[增强搜索] 第 {i + 1}/{max_attempts} 次搜索: {query}")

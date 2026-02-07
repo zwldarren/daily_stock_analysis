@@ -99,6 +99,7 @@ class NotificationService:
             self._channels[NotificationChannel.EMAIL] = EmailChannel(
                 {
                     "sender": nc.email_sender,
+                    "sender_name": nc.email_sender_name,
                     "password": nc.email_password,
                     "receivers": receivers,
                 }

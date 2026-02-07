@@ -8,6 +8,7 @@ from datetime import datetime
 from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr
 from typing import Any
 
 import markdown2
@@ -38,6 +39,7 @@ class EmailChannel(NotificationChannelBase):
 
     def __init__(self, config: dict[str, Any]):
         self.sender: str | None = None
+        self.sender_name: str = "stock_analyzer股票分析助手"
         self.password: str | None = None
         self.receivers: list[str] = []
         super().__init__(config)
@@ -45,6 +47,7 @@ class EmailChannel(NotificationChannelBase):
     def _validate_config(self) -> None:
         """验证配置"""
         self.sender = self.config.get("sender")
+        self.sender_name = self.config.get("sender_name", "stock_analyzer股票分析助手")
         self.password = self.config.get("password")
         self.receivers = self.config.get("receivers", [])
         if not self.receivers and self.sender:
@@ -85,7 +88,7 @@ class EmailChannel(NotificationChannelBase):
             # 构建邮件
             msg = MIMEMultipart("alternative")
             msg["Subject"] = str(Header(subject, "utf-8"))
-            msg["From"] = self.sender
+            msg["From"] = formataddr((self.sender_name, self.sender))
             msg["To"] = ", ".join(self.receivers)
 
             # 添加纯文本和 HTML 两个版本

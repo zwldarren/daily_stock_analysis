@@ -80,7 +80,7 @@ class AIConfig(BaseSettings):
     # OpenAI 配置
     openai_api_key: str | None = Field(default=None, validation_alias="OPENAI_API_KEY")
     openai_base_url: str | None = Field(default=None, validation_alias="OPENAI_BASE_URL")
-    openai_model: str = Field(default="gpt-4o-mini", validation_alias="OPENAI_MODEL")
+    openai_model: str = Field(default="gpt-5-mini", validation_alias="OPENAI_MODEL")
     openai_temperature: ValidTemperature = Field(default=0.7, validation_alias="OPENAI_TEMPERATURE")
 
 
@@ -127,6 +127,7 @@ class NotificationChannelConfig(BaseSettings):
     telegram_chat_id: str | None = Field(default=None, validation_alias="TELEGRAM_CHAT_ID")
     telegram_message_thread_id: str | None = Field(default=None, validation_alias="TELEGRAM_MESSAGE_THREAD_ID")
     email_sender: str | None = Field(default=None, validation_alias="EMAIL_SENDER")
+    email_sender_name: str = Field(default="stock_analyzer股票分析助手", validation_alias="EMAIL_SENDER_NAME")
     email_password: str | None = Field(default=None, validation_alias="EMAIL_PASSWORD")
     email_receivers_str: str = Field(default="", validation_alias="EMAIL_RECEIVERS")
     pushover_user_key: str | None = Field(default=None, validation_alias="PUSHOVER_USER_KEY")
@@ -231,15 +232,6 @@ class RealtimeQuoteConfig(BaseSettings):
         validation_alias="REALTIME_SOURCE_PRIORITY",
     )
     realtime_cache_ttl: int = Field(default=600, validation_alias="REALTIME_CACHE_TTL")
-    circuit_breaker_cooldown: int = Field(default=300, validation_alias="CIRCUIT_BREAKER_COOLDOWN")
-
-
-class DiscordConfig(BaseSettings):
-    """Discord 配置"""
-
-    model_config = _COMMON_CONFIG
-
-    discord_bot_status: str = Field(default="A股智能分析 | /help", validation_alias="DISCORD_BOT_STATUS")
 
 
 class BotConfig(BaseSettings):
@@ -341,7 +333,6 @@ class Config(BaseSettings):
     system: SystemConfig = Field(default_factory=SystemConfig)
     schedule: ScheduleConfig = Field(default_factory=ScheduleConfig)
     realtime_quote: RealtimeQuoteConfig = Field(default_factory=RealtimeQuoteConfig)
-    discord: DiscordConfig = Field(default_factory=DiscordConfig)
     bot: BotConfig = Field(default_factory=BotConfig)
     feishu_bot: FeishuBotConfig = Field(default_factory=FeishuBotConfig)
     dingtalk_bot: DingtalkBotConfig = Field(default_factory=DingtalkBotConfig)
