@@ -29,6 +29,7 @@ import time
 from typing import Any
 
 import pandas as pd
+from cachetools import TTLCache
 from tenacity import (
     before_sleep_log,
     retry,
@@ -68,23 +69,11 @@ USER_AGENTS = [
 ]
 
 
-# 缓存实时行情数据（避免重复请求）
-# TTL 设为 20 分钟 (1200秒)：
-# - 批量分析场景：通常 30 只股票在 5 分钟内分析完，20 分钟足够覆盖
-# - 实时性要求：股票分析不需要秒级实时数据，20 分钟延迟可接受
-# - 防封禁：减少 API 调用频率
-_realtime_cache: dict[str, Any] = {
-    "data": None,
-    "timestamp": 0,
-    "ttl": 1200,  # 20分钟缓存有效期
-}
+# Real-time quote cache with 20-minute TTL (1200 seconds)
+_realtime_cache: TTLCache[str, Any] = TTLCache(maxsize=1, ttl=1200)
 
-# ETF 实时行情缓存
-_etf_realtime_cache: dict[str, Any] = {
-    "data": None,
-    "timestamp": 0,
-    "ttl": 1200,  # 20分钟缓存有效期
-}
+# ETF real-time quote cache with 20-minute TTL (1200 seconds)
+_etf_realtime_cache: TTLCache[str, Any] = TTLCache(maxsize=1, ttl=1200)
 
 
 def _is_etf_code(stock_code: str) -> bool:
@@ -761,23 +750,19 @@ class AkshareFetcher(BaseFetcher):
         source_key = "akshare_em"
 
         try:
-            # 检查缓存
-            current_time = time.time()
-            if (
-                _realtime_cache["data"] is not None
-                and current_time - _realtime_cache["timestamp"] < _realtime_cache["ttl"]
-            ):
-                df = _realtime_cache["data"]
-                cache_age = int(current_time - _realtime_cache["timestamp"])
-                logger.debug(f"[缓存命中] A股实时行情(东财) - 缓存年龄 {cache_age}s/{_realtime_cache['ttl']}s")
+            # Check cache
+            cache_key = "realtime_data"
+            if cache_key in _realtime_cache:
+                df = _realtime_cache[cache_key]
+                logger.debug("[缓存命中] A股实时行情(东财)")
             else:
-                # 触发全量刷新
+                # Trigger full refresh
                 logger.info("[缓存未命中] 触发全量刷新 A股实时行情(东财)")
                 last_error: Exception | None = None
                 df = None
                 for attempt in range(1, 3):
                     try:
-                        # 防封禁策略
+                        # Anti-blocking strategy
                         self._set_random_user_agent()
                         self._enforce_rate_limit()
 
@@ -799,14 +784,13 @@ class AkshareFetcher(BaseFetcher):
                         logger.warning(f"[API错误] ak.stock_zh_a_spot_em 获取失败 (attempt {attempt}/2): {e}")
                         time.sleep(min(2**attempt, 5))
 
-                # 更新缓存：成功缓存数据；失败也缓存空数据，避免同一轮任务对同一接口反复请求
+                # Update cache: cache data on success; cache empty data on failure to avoid repeated requests
                 if df is None:
                     logger.error(f"[API错误] ak.stock_zh_a_spot_em 最终失败: {last_error}")
                     circuit_breaker.record_failure(source_key, str(last_error))
                     df = pd.DataFrame()
-                _realtime_cache["data"] = df
-                _realtime_cache["timestamp"] = current_time
-                logger.info(f"[缓存更新] A股实时行情(东财) 缓存已刷新，TTL={_realtime_cache['ttl']}s")
+                _realtime_cache[cache_key] = df
+                logger.info("[缓存更新] A股实时行情(东财) 缓存已刷新")
 
             if df is None or df.empty:
                 logger.warning(f"[实时行情] A股实时行情数据为空，跳过 {stock_code}")
@@ -1074,20 +1058,17 @@ class AkshareFetcher(BaseFetcher):
         source_key = "akshare_etf"
 
         try:
-            # 检查缓存
-            current_time = time.time()
-            if (
-                _etf_realtime_cache["data"] is not None
-                and current_time - _etf_realtime_cache["timestamp"] < _etf_realtime_cache["ttl"]
-            ):
-                df = _etf_realtime_cache["data"]
+            # Check cache
+            cache_key = "etf_realtime_data"
+            if cache_key in _etf_realtime_cache:
+                df = _etf_realtime_cache[cache_key]
                 logger.debug("[缓存命中] 使用缓存的ETF实时行情数据")
             else:
                 last_error: Exception | None = None
                 df = None
                 for attempt in range(1, 3):
                     try:
-                        # 防封禁策略
+                        # Anti-blocking strategy
                         self._set_random_user_agent()
                         self._enforce_rate_limit()
 
@@ -1113,8 +1094,7 @@ class AkshareFetcher(BaseFetcher):
                     logger.error(f"[API错误] ak.fund_etf_spot_em 最终失败: {last_error}")
                     circuit_breaker.record_failure(source_key, str(last_error))
                     df = pd.DataFrame()
-                _etf_realtime_cache["data"] = df
-                _etf_realtime_cache["timestamp"] = current_time
+                _etf_realtime_cache[cache_key] = df
 
             if df is None or df.empty:
                 logger.warning(f"[实时行情] ETF实时行情数据为空，跳过 {stock_code}")

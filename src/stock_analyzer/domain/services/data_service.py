@@ -1,19 +1,19 @@
-"""DataService 领域数据服务"""
+"""DataService domain data service with TTL caching."""
 
+import fnmatch
 import logging
-from datetime import date, datetime
-from typing import TYPE_CHECKING, Any
+from datetime import date
+from typing import Any
 
 import pandas as pd
+from cachetools import TTLCache
 
+from stock_analyzer.config import Config
 from stock_analyzer.domain.repositories import IDataFetcher, IStockRepository
-
-if TYPE_CHECKING:
-    from stock_analyzer.config import Config
-    from stock_analyzer.infrastructure.external.data_sources.fetchers.realtime_types import (
-        ChipDistribution,
-        UnifiedRealtimeQuote,
-    )
+from stock_analyzer.infrastructure.external.data_sources.fetchers.realtime_types import (
+    ChipDistribution,
+    UnifiedRealtimeQuote,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +32,11 @@ class DataService:
         self._fetcher_manager = fetcher_manager
         self._config = config
 
-        # Menory cache for real-time data and stock names
-        self._cache: dict[str, Any] = {}
-        self._cache_ttl: dict[str, float] = {}
+        # Initialize TTL cache for real-time data and stock names
+        # Default TTL will be set based on config when needed
+        self._cache: TTLCache[str, Any] = TTLCache(maxsize=1000, ttl=600)
 
-        logger.info("DataService 初始化完成")
+        logger.info("DataService initialized")
 
     def get_daily_data(
         self,
@@ -102,7 +102,7 @@ class DataService:
         quote = self._fetcher_manager.get_realtime_quote(stock_code)
 
         if quote is not None and self._config is not None:
-            # 更新缓存
+            # Update cache with configured TTL
             ttl = self._config.realtime_quote.realtime_cache_ttl
             self._set_cache(cache_key, quote, ttl)
 
@@ -241,36 +241,24 @@ class DataService:
         """Invalidate cache entries matching the pattern. If pattern is None, clear all cache."""
         if pattern is None:
             self._cache.clear()
-            self._cache_ttl.clear()
-            logger.info("[DataService] 所有缓存已清除")
+            logger.info("[DataService] All cache cleared")
         else:
-            import fnmatch
-
             keys_to_remove = [k for k in self._cache if fnmatch.fnmatch(k, pattern)]
             for key in keys_to_remove:
                 del self._cache[key]
-                if key in self._cache_ttl:
-                    del self._cache_ttl[key]
-            logger.info(f"[DataService] 清除缓存: {pattern} ({len(keys_to_remove)} 条)")
+            logger.info(f"[DataService] Cache cleared: {pattern} ({len(keys_to_remove)} entries)")
 
     def _is_cache_valid(self, key: str) -> bool:
-        """Check if cache entry is valid (exists and not expired)"""
-        if key not in self._cache:
-            return False
-
-        if key not in self._cache_ttl:
-            return False
-
-        expiry = self._cache_ttl[key]
-        if datetime.now().timestamp() > expiry:
-            # 缓存过期，清理
-            del self._cache[key]
-            del self._cache_ttl[key]
-            return False
-
-        return True
+        """Check if cache entry is valid (exists and not expired)."""
+        return key in self._cache
 
     def _set_cache(self, key: str, value: Any, ttl_seconds: int) -> None:
-        """Get cache entry with TTL (time-to-live) in seconds"""
+        """Set cache entry with TTL (time-to-live) in seconds."""
+        # Note: TTLCache automatically handles TTL per entry
+        # We create a new cache with the specified TTL if needed
+        if self._cache.ttl != ttl_seconds:
+            # Create new cache with updated TTL and copy existing entries
+            old_cache = dict(self._cache)
+            self._cache = TTLCache(maxsize=1000, ttl=ttl_seconds)
+            self._cache.update(old_cache)
         self._cache[key] = value
-        self._cache_ttl[key] = datetime.now().timestamp() + ttl_seconds

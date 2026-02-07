@@ -20,6 +20,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 
 import pandas as pd
+from cachetools import LRUCache
 from tenacity import (
     before_sleep_log,
     retry,
@@ -67,8 +68,10 @@ class BaostockFetcher(BaseFetcher):
     priority = int(os.getenv("BAOSTOCK_PRIORITY", "3"))
 
     def __init__(self):
-        """初始化 BaostockFetcher"""
+        """Initialize BaostockFetcher."""
         self._bs_module = None
+        # Stock name cache with LRU eviction policy
+        self._stock_name_cache: LRUCache[str, str] = LRUCache(maxsize=1000)
 
     def _get_baostock(self):
         """
@@ -250,30 +253,23 @@ class BaostockFetcher(BaseFetcher):
         return df
 
     def get_stock_name(self, stock_code: str) -> str | None:
-        """
-        获取股票名称
-
-        使用 Baostock 的 query_stock_basic 接口获取股票基本信息
+        """Get stock name using Baostock query_stock_basic API.
 
         Args:
-            stock_code: 股票代码
+            stock_code: Stock code
 
         Returns:
-            股票名称，失败返回 None
+            Stock name, None if failed
         """
-        # 检查缓存
-        if hasattr(self, "_stock_name_cache") and stock_code in self._stock_name_cache:
+        # Check cache
+        if stock_code in self._stock_name_cache:
             return self._stock_name_cache[stock_code]
-
-        # 初始化缓存
-        if not hasattr(self, "_stock_name_cache"):
-            self._stock_name_cache = {}
 
         try:
             bs_code = self._convert_stock_code(stock_code)
 
             with self._baostock_session() as bs:
-                # 查询股票基本信息
+                # Query stock basic info
                 rs = bs.query_stock_basic(code=bs_code)
 
                 if rs.error_code == "0":
@@ -282,7 +278,7 @@ class BaostockFetcher(BaseFetcher):
                         data_list.append(rs.get_row_data())
 
                     if data_list:
-                        # Baostock 返回的字段：code, code_name, ipoDate, outDate, type, status
+                        # Baostock returns fields: code, code_name, ipoDate, outDate, type, status
                         fields = rs.fields
                         name_idx = fields.index("code_name") if "code_name" in fields else None
                         if name_idx is not None and len(data_list[0]) > name_idx:
@@ -297,17 +293,14 @@ class BaostockFetcher(BaseFetcher):
         return None
 
     def get_stock_list(self) -> pd.DataFrame | None:
-        """
-        获取股票列表
-
-        使用 Baostock 的 query_stock_basic 接口获取全部股票列表
+        """Get stock list using Baostock query_stock_basic API.
 
         Returns:
-            包含 code, name 列的 DataFrame，失败返回 None
+            DataFrame with code and name columns, None if failed
         """
         try:
             with self._baostock_session() as bs:
-                # 查询所有股票基本信息
+                # Query all stock basic info
                 rs = bs.query_stock_basic()
 
                 if rs.error_code == "0":
@@ -318,13 +311,11 @@ class BaostockFetcher(BaseFetcher):
                     if data_list:
                         df = pd.DataFrame(data_list, columns=rs.fields)
 
-                        # 转换代码格式（去除 sh. 或 sz. 前缀）
+                        # Convert code format (remove sh. or sz. prefix)
                         df["code"] = df["code"].apply(lambda x: x.split(".")[1] if "." in x else x)
                         df = df.rename(columns={"code_name": "name"})
 
-                        # 更新缓存
-                        if not hasattr(self, "_stock_name_cache"):
-                            self._stock_name_cache = {}
+                        # Update cache
                         for _, row in df.iterrows():
                             self._stock_name_cache[row["code"]] = row["name"]
 

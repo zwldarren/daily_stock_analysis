@@ -8,14 +8,11 @@ Bot Webhook 处理器
 
 import json
 import logging
-from typing import TYPE_CHECKING
 
 from .dispatcher import get_dispatcher
 from .models import WebhookResponse
 from .platforms import ALL_PLATFORMS
-
-if TYPE_CHECKING:
-    from .platforms.base import BotPlatform
+from .platforms.base import BotPlatform
 
 logger = logging.getLogger(__name__)
 

@@ -20,6 +20,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 
 import pandas as pd
+from cachetools import LRUCache
 from tenacity import (
     before_sleep_log,
     retry,
@@ -90,8 +91,8 @@ class PytdxFetcher(BaseFetcher):
         self._api = None
         self._connected = False
         self._current_host_idx = 0
-        self._stock_list_cache = None  # 股票列表缓存
-        self._stock_name_cache = {}  # 股票名称缓存 {code: name}
+        self._stock_list_cache: dict[str, str] | None = None  # Stock list cache
+        self._stock_name_cache: LRUCache[str, str] = LRUCache(maxsize=1000)  # Stock name cache with LRU eviction
 
     def _get_pytdx(self):
         """
@@ -285,16 +286,15 @@ class PytdxFetcher(BaseFetcher):
         return df
 
     def get_stock_name(self, stock_code: str) -> str | None:
-        """
-        获取股票名称
+        """Get stock name.
 
         Args:
-            stock_code: 股票代码
+            stock_code: Stock code
 
         Returns:
-            股票名称，失败返回 None
+            Stock name, None if failed
         """
-        # 先检查缓存
+        # Check cache first
         if stock_code in self._stock_name_cache:
             return self._stock_name_cache[stock_code]
 
@@ -302,23 +302,23 @@ class PytdxFetcher(BaseFetcher):
             market, code = self._get_market_code(stock_code)
 
             with self._pytdx_session() as api:
-                # 获取股票列表（缓存）
+                # Get stock list (cached)
                 if self._stock_list_cache is None:
-                    # 获取深圳和上海股票列表
-                    sz_stocks = api.get_security_list(0, 0)  # 深圳
-                    sh_stocks = api.get_security_list(1, 0)  # 上海
+                    # Get Shenzhen and Shanghai stock lists
+                    sz_stocks = api.get_security_list(0, 0)  # Shenzhen
+                    sh_stocks = api.get_security_list(1, 0)  # Shanghai
 
                     self._stock_list_cache = {}
                     for stock in (sz_stocks or []) + (sh_stocks or []):
                         self._stock_list_cache[stock["code"]] = stock["name"]
 
-                # 查找股票名称
+                # Look up stock name
                 name = self._stock_list_cache.get(code)
                 if name:
                     self._stock_name_cache[stock_code] = name
                     return name
 
-                # 尝试使用 get_finance_info
+                # Try using get_finance_info
                 finance_info = api.get_finance_info(market, code)
                 if finance_info and "name" in finance_info:
                     name = finance_info["name"]

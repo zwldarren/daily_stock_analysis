@@ -76,6 +76,10 @@ select = [
 [tool.pytest.ini_options]
 addopts = "--tb=short --cov=stock_analyzer --cov-report=term-missing"
 testpaths = ["tests"]
+markers = [
+    "live: marks tests that call real data provider APIs (may consume quota)",
+    "slow: marks tests that are slow to run",
+]
 filterwarnings = [
     "ignore::DeprecationWarning:lark_oapi.*",
     "ignore::DeprecationWarning:.*well_known_types.*",

@@ -20,6 +20,7 @@ import time
 from datetime import datetime
 
 import pandas as pd
+from cachetools import LRUCache
 from tenacity import (
     before_sleep_log,
     retry,
@@ -77,14 +78,17 @@ class TushareFetcher(BaseFetcher):
             rate_limit_per_minute: 每分钟最大请求数（默认80，Tushare免费配额）
         """
         self.rate_limit_per_minute = rate_limit_per_minute
-        self._call_count = 0  # 当前分钟内的调用次数
-        self._minute_start: float | None = None  # 当前计数周期开始时间
-        self._api: object | None = None  # Tushare API 实例
+        self._call_count = 0  # Current minute call count
+        self._minute_start: float | None = None  # Current counting cycle start time
+        self._api: object | None = None  # Tushare API instance
 
-        # 尝试初始化 API
+        # Stock name cache with LRU eviction policy
+        self._stock_name_cache: LRUCache[str, str] = LRUCache(maxsize=1000)
+
+        # Initialize API
         self._init_api()
 
-        # 根据 API 初始化结果动态调整优先级
+        # Dynamically adjust priority based on API initialization result
         self.priority = self._determine_priority()
 
     def _init_api(self) -> None:
@@ -339,26 +343,22 @@ class TushareFetcher(BaseFetcher):
             logger.warning("Tushare API 未初始化，无法获取股票名称")
             return None
 
-        # 检查缓存
-        if hasattr(self, "_stock_name_cache") and stock_code in self._stock_name_cache:
+        # Check cache
+        if stock_code in self._stock_name_cache:
             return self._stock_name_cache[stock_code]
-
-        # 初始化缓存
-        if not hasattr(self, "_stock_name_cache"):
-            self._stock_name_cache = {}
 
         if self._api is None:
             logger.warning("Tushare API 未初始化，无法获取股票名称")
             return None
 
         try:
-            # 速率限制检查
+            # Rate limit check
             self._check_rate_limit()
 
-            # 转换代码格式
+            # Convert code format
             ts_code = self._convert_stock_code(stock_code)
 
-            # 调用 stock_basic 接口
+            # Call stock_basic API
             df = self._api.stock_basic(ts_code=ts_code, fields="ts_code,name")  # type: ignore[union-attr]
 
             if df is not None and not df.empty:
@@ -393,12 +393,10 @@ class TushareFetcher(BaseFetcher):
             df = self._api.stock_basic(exchange="", list_status="L", fields="ts_code,name,industry,area,market")  # type: ignore[union-attr]
 
             if df is not None and not df.empty:
-                # 转换 ts_code 为标准代码格式
+                # Convert ts_code to standard code format
                 df["code"] = df["ts_code"].apply(lambda x: x.split(".")[0])
 
-                # 更新缓存
-                if not hasattr(self, "_stock_name_cache"):
-                    self._stock_name_cache = {}
+                # Update cache
                 for _, row in df.iterrows():
                     self._stock_name_cache[row["code"]] = row["name"]
 

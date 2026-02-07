@@ -6,10 +6,9 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    import pandas as pd
+import pandas as pd
 
 
 class IDataFetcher(ABC):

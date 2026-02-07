@@ -1,15 +1,16 @@
-"""
-股票名称解析服务
+"""Stock name resolution service with TTL caching.
 
-提供统一的股票名称获取逻辑，整合多种数据源：
-1. 分析上下文（优先）
-2. 实时行情数据
-3. 静态映射表
-4. 动态数据源
+Provides unified stock name lookup logic, integrating multiple data sources:
+1. Analysis context (priority)
+2. Real-time quote data
+3. Static mapping table
+4. Dynamic data sources
 """
 
 import logging
 from typing import Any
+
+from cachetools import TTLCache
 
 from stock_analyzer.domain.constants import STOCK_NAME_MAP
 from stock_analyzer.domain.exceptions import handle_errors
@@ -17,21 +18,25 @@ from stock_analyzer.domain.repositories import IDataFetcher
 
 logger = logging.getLogger(__name__)
 
+# TTL for stock name cache: 24 hours (86400 seconds)
+STOCK_NAME_CACHE_TTL = 86400
+
 
 class StockNameResolver:
-    """股票名称解析器
+    """Stock name resolver with TTL caching.
 
-    统一处理股票名称获取逻辑，支持多种数据源和缓存机制
+    Unified stock name lookup logic supporting multiple data sources and caching.
     """
 
     def __init__(self, data_manager: IDataFetcher | None = None):
-        """初始化解析器
+        """Initialize resolver.
 
         Args:
-            data_manager: 数据获取管理器（可选，用于动态查询）
+            data_manager: Data fetcher manager (optional, for dynamic queries)
         """
         self._data_manager = data_manager
-        self._local_cache: dict[str, str] = {}
+        # TTL cache for stock names: 24 hours
+        self._cache: TTLCache[str, str] = TTLCache(maxsize=5000, ttl=STOCK_NAME_CACHE_TTL)
 
     @classmethod
     def from_context(
@@ -39,40 +44,40 @@ class StockNameResolver:
         stock_code: str,
         context: dict[str, Any] | None = None,
     ) -> str:
-        """从上下文快速解析股票名称（类方法，无需实例化）
+        """Quickly resolve stock name from context (class method, no instantiation needed).
 
-        获取优先级：
-        1. 上下文中的 stock_name 字段
-        2. 上下文中的 realtime.name 字段
-        3. 静态映射表 STOCK_NAME_MAP
-        4. 默认名称（股票{code}）
+        Lookup priority:
+        1. stock_name field in context
+        2. realtime.name field in context
+        3. Static mapping table STOCK_NAME_MAP
+        4. Default name (股票{code})
 
         Args:
-            stock_code: 股票代码
-            context: 分析上下文（可选）
+            stock_code: Stock code
+            context: Analysis context (optional)
 
         Returns:
-            股票中文名称
+            Chinese stock name
         """
-        # 1. 从上下文直接获取
+        # 1. Get from context directly
         if context:
-            # 优先从 stock_name 字段获取
+            # Priority: stock_name field
             name = context.get("stock_name")
             if name and not name.startswith("股票"):
                 return name
 
-            # 其次从 realtime 数据获取
+            # Second: realtime data
             realtime = context.get("realtime")
             if isinstance(realtime, dict):
                 name = realtime.get("name")
                 if name:
                     return name
 
-        # 2. 从静态映射表获取
+        # 2. Get from static mapping table
         if stock_code in STOCK_NAME_MAP:
             return STOCK_NAME_MAP[stock_code]
 
-        # 3. 返回默认名称
+        # 3. Return default name
         return f"股票{stock_code}"
 
     def resolve(
@@ -82,53 +87,53 @@ class StockNameResolver:
         use_cache: bool = True,
         update_global_cache: bool = True,
     ) -> str:
-        """解析股票名称（完整版）
+        """Resolve stock name (full version).
 
-        获取优先级：
-        1. 本地缓存
-        2. 上下文数据
-        3. 静态映射表
-        4. 动态数据源
-        5. 默认名称
+        Lookup priority:
+        1. Local cache
+        2. Context data
+        3. Static mapping table
+        4. Dynamic data sources
+        5. Default name
 
         Args:
-            stock_code: 股票代码
-            context: 分析上下文（可选）
-            use_cache: 是否使用缓存
-            update_global_cache: 是否更新全局缓存
+            stock_code: Stock code
+            context: Analysis context (optional)
+            use_cache: Whether to use cache
+            update_global_cache: Whether to update global cache
 
         Returns:
-            股票中文名称
+            Chinese stock name
         """
-        # 1. 检查本地缓存
-        if use_cache and stock_code in self._local_cache:
-            return self._local_cache[stock_code]
+        # 1. Check local cache
+        if use_cache and stock_code in self._cache:
+            return self._cache[stock_code]
 
-        # 2. 从上下文获取
+        # 2. Get from context
         name = self._resolve_from_context(stock_code, context)
         if name and not name.startswith("股票"):
             if use_cache:
-                self._local_cache[stock_code] = name
+                self._cache[stock_code] = name
             return name
 
-        # 3. 从静态映射表获取
+        # 3. Get from static mapping table
         if stock_code in STOCK_NAME_MAP:
             name = STOCK_NAME_MAP[stock_code]
             if use_cache:
-                self._local_cache[stock_code] = name
+                self._cache[stock_code] = name
             return name
 
-        # 4. 从动态数据源获取
+        # 4. Get from dynamic data source
         if self._data_manager:
             name = self._resolve_from_data_source(stock_code)
             if name:
                 if use_cache:
-                    self._local_cache[stock_code] = name
+                    self._cache[stock_code] = name
                 if update_global_cache:
                     STOCK_NAME_MAP[stock_code] = name
                 return name
 
-        # 5. 返回默认名称
+        # 5. Return default name
         default_name = f"股票{stock_code}"
         logger.debug(f"无法解析股票名称，使用默认值: {default_name}")
         return default_name
@@ -176,42 +181,42 @@ class StockNameResolver:
         stock_codes: list[str],
         use_cache: bool = True,
     ) -> dict[str, str]:
-        """批量解析股票名称
+        """Batch resolve stock names.
 
         Args:
-            stock_codes: 股票代码列表
-            use_cache: 是否使用缓存
+            stock_codes: List of stock codes
+            use_cache: Whether to use cache
 
         Returns:
-            {股票代码: 股票名称} 字典
+            Dictionary of {stock_code: stock_name}
         """
         result = {}
         missing_codes = []
 
-        # 1. 从缓存获取
+        # 1. Get from cache
         if use_cache:
             for code in stock_codes:
-                if code in self._local_cache:
-                    result[code] = self._local_cache[code]
+                if code in self._cache:
+                    result[code] = self._cache[code]
                 elif code in STOCK_NAME_MAP:
                     result[code] = STOCK_NAME_MAP[code]
-                    self._local_cache[code] = STOCK_NAME_MAP[code]
+                    self._cache[code] = STOCK_NAME_MAP[code]
                 else:
                     missing_codes.append(code)
         else:
             missing_codes = stock_codes
 
-        # 2. 批量从数据源获取
+        # 2. Batch fetch from data source
         if missing_codes and self._data_manager:
             try:
                 batch_result = self._data_manager.batch_get_stock_names(missing_codes)
                 for code, name in batch_result.items():
                     if name:
                         result[code] = name
-                        self._local_cache[code] = name
+                        self._cache[code] = name
                         STOCK_NAME_MAP[code] = name
 
-                # 记录未找到的代码
+                # Record unfound codes
                 for code in missing_codes:
                     if code not in result:
                         result[code] = f"股票{code}"
@@ -226,18 +231,18 @@ class StockNameResolver:
         return result
 
     def clear_cache(self) -> None:
-        """清空本地缓存"""
-        self._local_cache.clear()
+        """Clear local cache."""
+        self._cache.clear()
         logger.debug("股票名称本地缓存已清空")
 
     def register(self, code: str, name: str) -> None:
-        """注册股票名称到本地缓存和全局映射表
+        """Register stock name to local cache and global mapping.
 
         Args:
-            code: 股票代码
-            name: 股票名称
+            code: Stock code
+            name: Stock name
         """
-        self._local_cache[code] = name
+        self._cache[code] = name
         STOCK_NAME_MAP[code] = name
         logger.debug(f"注册股票名称: {code} -> {name}")
 
