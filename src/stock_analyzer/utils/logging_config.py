@@ -31,10 +31,21 @@ def setup_logging(
 
     # 控制台 Handler - 彩色输出
     console_level = "DEBUG" if debug else "INFO"
+
+    def shorten_name(record):
+        """缩短模块路径，移除 stock_analyzer 前缀（但保留至少两级）"""
+        name = record["name"]
+        parts = name.split(".")
+        if len(parts) > 2 and parts[0] == "stock_analyzer":
+            record["extra"]["short_name"] = ".".join(parts[1:])
+        else:
+            record["extra"]["short_name"] = name
+        return True
+
     console_format = (
-        "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+        "<green>{time:HH:mm:ss}</green> | "
         "<level>{level: <8}</level> | "
-        "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+        "<cyan>{extra[short_name]}</cyan>:<cyan>{line}</cyan> | "
         "<level>{message}</level>"
     )
     logger.add(
@@ -43,13 +54,14 @@ def setup_logging(
         format=console_format,
         colorize=True,
         enqueue=True,
+        filter=shorten_name,
     )
 
     # 常规日志文件 - INFO 级别及以上
     if json_format:
         file_format = "{extra[json]}"
     else:
-        file_format = "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} | {message}"
+        file_format = "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {extra[short_name]}:{line} | {message}"
 
     logger.add(
         str(log_file),
@@ -60,13 +72,16 @@ def setup_logging(
         encoding="utf-8",
         enqueue=True,
         delay=True,  # 延迟打开文件
+        filter=shorten_name,
     )
 
     # 调试日志文件 - DEBUG 级别及以上
+    # 调试日志保留完整路径以便调试
+    debug_format = "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} | {message}"
     logger.add(
         str(debug_log_file),
         level="DEBUG",
-        format=file_format,
+        format=debug_format,
         rotation="00:00",
         retention="7 days",  # 调试日志保留7天
         encoding="utf-8",

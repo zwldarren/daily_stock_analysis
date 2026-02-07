@@ -32,7 +32,6 @@ from loguru import logger
 
 from stock_analyzer.infrastructure.external.feishu.doc_manager import FeishuDocManager
 
-from .ai.analyzer import GeminiAnalyzer
 from .application import register_event_handlers
 from .application.market_review import run_market_review
 from .application.services.stock_analysis_orchestrator import StockAnalysisOrchestrator
@@ -137,13 +136,15 @@ def main(
                     serpapi_keys=config.search.serpapi_keys,
                 )
 
-            if config.ai.gemini_api_key or config.ai.openai_api_key:
-                analyzer = GeminiAnalyzer(api_key=config.ai.gemini_api_key)
+            if config.ai.llm_api_key:
+                from stock_analyzer.ai.analyzer import AIAnalyzer
+
+                analyzer = AIAnalyzer()
                 if not analyzer.is_available():
                     logger.warning("AI 分析器初始化后不可用，请检查 API Key 配置")
                     analyzer = None
             else:
-                logger.warning("未检测到 API Key (Gemini/OpenAI)，将仅使用模板生成报告")
+                logger.warning("未检测到 LLM_API_KEY，将仅使用模板生成报告")
 
             run_market_review(
                 notifier=notifier,

@@ -76,24 +76,26 @@ _COMMON_CONFIG = SettingsConfigDict(
 
 
 class AIConfig(BaseSettings):
-    """AI 模型配置"""
+    """AI 模型配置 - 使用 litellm 格式支持多 provider"""
 
     model_config = _COMMON_CONFIG
 
-    # Gemini 配置
-    gemini_api_key: str | None = Field(default=None, validation_alias="GEMINI_API_KEY")
-    gemini_model: str = Field(default="gemini-3-flash-preview", validation_alias="GEMINI_MODEL")
-    gemini_model_fallback: str = Field(default="gemini-2.5-flash", validation_alias="GEMINI_MODEL_FALLBACK")
-    gemini_temperature: ValidTemperature = Field(default=0.7, validation_alias="GEMINI_TEMPERATURE")
-    gemini_request_delay: float = Field(default=2.0, validation_alias="GEMINI_REQUEST_DELAY")
-    gemini_max_retries: int = Field(default=5, ge=0, le=10, validation_alias="GEMINI_MAX_RETRIES")
-    gemini_retry_delay: float = Field(default=5.0, validation_alias="GEMINI_RETRY_DELAY")
+    # 主模型配置（litellm 格式：provider/model-name）
+    llm_model: str = Field(default="deepseek/deepseek-reasoner", validation_alias="LLM_MODEL")
+    llm_api_key: str | None = Field(default=None, validation_alias="LLM_API_KEY")
+    llm_base_url: str | None = Field(default=None, validation_alias="LLM_BASE_URL")
 
-    # OpenAI 配置
-    openai_api_key: str | None = Field(default=None, validation_alias="OPENAI_API_KEY")
-    openai_base_url: str | None = Field(default=None, validation_alias="OPENAI_BASE_URL")
-    openai_model: str = Field(default="gpt-5-mini", validation_alias="OPENAI_MODEL")
-    openai_temperature: ValidTemperature = Field(default=0.7, validation_alias="OPENAI_TEMPERATURE")
+    # 备选模型配置（用于失败回退）
+    llm_fallback_model: str | None = Field(default=None, validation_alias="LLM_FALLBACK_MODEL")
+    llm_fallback_api_key: str | None = Field(default=None, validation_alias="LLM_FALLBACK_API_KEY")
+    llm_fallback_base_url: str | None = Field(default=None, validation_alias="LLM_FALLBACK_BASE_URL")
+
+    # 通用生成参数
+    llm_temperature: ValidTemperature = Field(default=0.7, validation_alias="LLM_TEMPERATURE")
+    llm_max_tokens: int = Field(default=8192, ge=1, le=32768, validation_alias="LLM_MAX_TOKENS")
+    llm_request_delay: float = Field(default=2.0, validation_alias="LLM_REQUEST_DELAY")
+    llm_max_retries: int = Field(default=5, ge=0, le=10, validation_alias="LLM_MAX_RETRIES")
+    llm_retry_delay: float = Field(default=5.0, validation_alias="LLM_RETRY_DELAY")
 
 
 class SearchConfig(BaseSettings):
@@ -396,10 +398,8 @@ class Config(BaseSettings):
         if not self.datasource.tushare_token:
             warnings_list.append("提示：未配置 Tushare Token，将使用其他数据源")
 
-        if not self.ai.gemini_api_key and not self.ai.openai_api_key:
-            warnings_list.append("警告：未配置 Gemini 或 OpenAI API Key，AI 分析功能将不可用")
-        elif not self.ai.gemini_api_key:
-            warnings_list.append("提示：未配置 Gemini API Key，将使用 OpenAI 兼容 API")
+        if not self.ai.llm_api_key:
+            warnings_list.append("警告：未配置 LLM API Key（LLM_API_KEY），AI 分析功能将不可用")
 
         if (
             not self.search.bocha_api_keys

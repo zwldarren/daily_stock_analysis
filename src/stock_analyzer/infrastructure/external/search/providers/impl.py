@@ -9,6 +9,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 
 import requests
+import serpapi
 
 from stock_analyzer.domain.models import SearchResponse, SearchResult
 from stock_analyzer.infrastructure.external.search.providers.base import (
@@ -113,17 +114,6 @@ class SerpAPISearchProvider(ApiKeySearchProvider):
     def _do_search_with_key(self, query: str, api_key: str, max_results: int, days: int = 7) -> SearchResponse:
         """Execute SerpAPI search."""
         try:
-            from serpapi import GoogleSearch
-        except ImportError:
-            return SearchResponse(
-                query=query,
-                results=[],
-                provider=self.name,
-                success=False,
-                error_message="google-search-results not installed, run: pip install google-search-results",
-            )
-
-        try:
             # 确定时间范围参数 tbs
             tbs = "qdr:w"
             if days <= 1:
@@ -147,7 +137,7 @@ class SerpAPISearchProvider(ApiKeySearchProvider):
                 "num": max_results,
             }
 
-            search = GoogleSearch(params)
+            search = serpapi.search(params)
             response = search.get_dict()
 
             # 解析结果

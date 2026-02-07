@@ -53,9 +53,9 @@ class AIContainer(containers.DeclarativeContainer):
 
     infrastructure = providers.DependenciesContainer()
 
-    from stock_analyzer.ai.analyzer import GeminiAnalyzer
+    from stock_analyzer.ai.analyzer import AIAnalyzer
 
-    analyzer = providers.Singleton(GeminiAnalyzer)
+    analyzer = providers.Singleton(AIAnalyzer)
 
 
 class ServiceContainer(containers.DeclarativeContainer):

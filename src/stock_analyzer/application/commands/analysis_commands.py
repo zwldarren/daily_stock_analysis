@@ -171,6 +171,64 @@ class AnalyzeStockCommand:
             else [],
         }
 
+        # 添加今日数据（从 daily_data 最后一天获取）
+        if daily_data is not None and not daily_data.empty:
+            # 计算均线数据
+            if "close" in daily_data.columns:
+                daily_data["ma5"] = daily_data["close"].rolling(window=5, min_periods=1).mean()
+                daily_data["ma10"] = daily_data["close"].rolling(window=10, min_periods=1).mean()
+                daily_data["ma20"] = daily_data["close"].rolling(window=20, min_periods=1).mean()
+
+            latest = daily_data.iloc[-1]
+            date_value = latest.get("date") or latest.get("trade_date", "")
+            context["date"] = str(date_value) if date_value else ""
+
+            context["today"] = {
+                "date": str(date_value) if date_value else "",
+                "open": latest.get("open"),
+                "high": latest.get("high"),
+                "low": latest.get("low"),
+                "close": latest.get("close"),
+                "volume": latest.get("volume"),
+                "amount": latest.get("amount"),
+                "pct_chg": latest.get("pct_chg"),
+                "ma5": latest.get("ma5"),
+                "ma10": latest.get("ma10"),
+                "ma20": latest.get("ma20"),
+            }
+            # 计算均线形态
+            close = latest.get("close") or 0
+            ma5 = latest.get("ma5") or 0
+            ma10 = latest.get("ma10") or 0
+            ma20 = latest.get("ma20") or 0
+            if close > ma5 > ma10 > ma20 > 0:
+                context["ma_status"] = "多头排列 📈"
+            elif close < ma5 < ma10 < ma20 and ma20 > 0:
+                context["ma_status"] = "空头排列 📉"
+            elif close > ma5 and ma5 > ma10:
+                context["ma_status"] = "短期向好 🔼"
+            elif close < ma5 and ma5 < ma10:
+                context["ma_status"] = "短期走弱 🔽"
+            else:
+                context["ma_status"] = "震荡整理 ↔️"
+
+            # 添加昨日数据（用于计算变化率）
+            if len(daily_data) > 1:
+                prev = daily_data.iloc[-2]
+                context["yesterday"] = {
+                    "close": prev.get("close"),
+                    "volume": prev.get("volume"),
+                }
+                # 计算相比昨日的变化
+                prev_close = prev.get("close") or 0
+                prev_volume = prev.get("volume") or 0
+                if prev_close > 0:
+                    context["price_change_ratio"] = round(
+                        ((latest.get("close") or 0) - prev_close) / prev_close * 100, 2
+                    )
+                if prev_volume > 0:
+                    context["volume_change_ratio"] = round(((latest.get("volume") or 0) / prev_volume), 2)
+
         # 添加实时行情
         if realtime_quote:
             context["realtime"] = {
@@ -272,7 +330,7 @@ class BatchAnalyzeStocksCommand:
         try:
             # 调用analyzer.batch_analyze，符合IAIAnalyzer接口
             analysis_delay = self._single_command._config.schedule.analysis_delay
-            results = self._analyzer.batch_analyze(contexts, delay_between=analysis_delay)
+            results = self._analyzer.batch_analyze(contexts, delay_between=analysis_delay, news_contexts=news_contexts)
 
             # 3. 保存结果并发布事件
             valid_results: list[AnalysisResult] = []

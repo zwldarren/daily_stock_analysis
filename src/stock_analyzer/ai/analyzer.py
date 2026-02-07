@@ -4,16 +4,17 @@ A股自选股智能分析系统 - AI分析层
 ===================================
 
 职责：
-1. 封装 Gemini API 调用逻辑
-2. 利用 Google Search Grounding 获取实时新闻
-3. 结合技术面和消息面生成分析报告
+1. 使用 litellm 调用多种 LLM API 进行股票分析
+2. 支持 100+ providers（deepseek, gemini, openai, anthropic 等）
+3. 支持主备模型自动回退
+4. 结合技术面和消息面生成分析报告
 """
 
 import logging
 import time
 from typing import Any
 
-from stock_analyzer.ai.clients import GeminiClient, OpenAIClient
+from stock_analyzer.ai.clients import LiteLLMClient
 from stock_analyzer.ai.prompt_builder import PromptBuilder
 from stock_analyzer.ai.response_parser import ResponseParser
 from stock_analyzer.ai.snapshot_builder import MarketSnapshotBuilder
@@ -26,52 +27,65 @@ from stock_analyzer.utils.fallback import create_sequential_fallback
 logger = logging.getLogger(__name__)
 
 
-class GeminiAnalyzer(IAIAnalyzer):
+class AIAnalyzer(IAIAnalyzer):
     """
-    Gemini AI 分析器
+    AI 分析器 - 基于 litellm 的多 provider 支持
 
     职责：
-    1. 调用 Google Gemini API 进行股票分析
-    2. 结合预先搜索的新闻和技术面数据生成分析报告
-    3. 解析 AI 返回的 JSON 格式结果
+    1. 调用配置的 LLM API 进行股票分析
+    2. 支持主备模型自动回退
+    3. 结合预先搜索的新闻和技术面数据生成分析报告
+    4. 解析 AI 返回的 JSON 格式结果
 
     使用方式：
-        analyzer = GeminiAnalyzer()
+        analyzer = AIAnalyzer()
         result = analyzer.analyze(context, news_context)
     """
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(self):
         """
         初始化 AI 分析器
 
-        优先级：Gemini > OpenAI 兼容 API
-
-        Args:
-            api_key: Gemini API Key（可选，默认从配置读取）
+        自动从配置读取主模型和备选模型配置
         """
-        self._gemini_client = GeminiClient(api_key)
-        self._openai_client = OpenAIClient()
-        self._use_openai = False
+        config = get_config()
 
-        # 预创建回退策略对象，避免每次调用时重复创建
-        self._fallback_gemini_primary = create_sequential_fallback(name="ai_gemini_fallback")
-        self._fallback_openai_primary = create_sequential_fallback(name="ai_openai_fallback")
+        # 初始化主模型客户端
+        self._primary_client = LiteLLMClient(
+            model=config.ai.llm_model,
+            api_key=config.ai.llm_api_key,
+            base_url=config.ai.llm_base_url,
+        )
 
-        # 如果Gemini不可用，检查OpenAI
-        if not self._gemini_client.is_available():
-            if self._openai_client.is_available():
-                self._use_openai = True
-                logger.info("使用 OpenAI 兼容 API 作为 AI 后端")
-            else:
-                logger.warning("未配置任何 AI API Key，AI 分析功能将不可用")
+        # 初始化备选模型客户端（如果配置了）
+        self._fallback_client: LiteLLMClient | None = None
+        if config.ai.llm_fallback_model and config.ai.llm_fallback_api_key:
+            self._fallback_client = LiteLLMClient(
+                model=config.ai.llm_fallback_model,
+                api_key=config.ai.llm_fallback_api_key,
+                base_url=config.ai.llm_fallback_base_url,
+            )
+
+        # 预创建回退策略对象
+        self._fallback_handler = create_sequential_fallback(name="ai_llm_fallback")
+
+        # 检查可用性
+        if not self.is_available():
+            logger.warning("未配置有效的 LLM API Key，AI 分析功能将不可用")
+        else:
+            logger.info(f"AI 分析器初始化成功 (主模型: {config.ai.llm_model})")
+            if self._fallback_client and self._fallback_client.is_available():
+                logger.info(f"备选模型已配置: {config.ai.llm_fallback_model}")
 
     def is_available(self) -> bool:
         """检查分析器是否可用"""
-        return self._gemini_client.is_available() or self._openai_client.is_available()
+        return self._primary_client.is_available() or (
+            self._fallback_client is not None and self._fallback_client.is_available()
+        )
 
     def _call_api(self, prompt: str, generation_config: dict) -> str:
         """
-        调用 AI API，使用统一的回退策略
+        调用 AI API，支持主备模型回退
 
         Args:
             prompt: 提示词
@@ -83,24 +97,27 @@ class GeminiAnalyzer(IAIAnalyzer):
         if not self.is_available():
             raise Exception("没有可用的 AI 客户端")
 
-        # 定义主操作和回退操作
-        def call_gemini() -> str:
-            return self._gemini_client.generate(prompt, generation_config)
+        def call_primary() -> str:
+            return self._primary_client.generate(prompt, generation_config)
 
-        def call_openai() -> str:
-            return self._openai_client.generate(prompt, generation_config)
+        # 如果有备选模型且主模型可用，使用回退策略
+        if self._fallback_client and self._fallback_client.is_available():
 
-        # 根据配置决定主操作，使用预创建的回退对象
-        if self._use_openai:
-            # OpenAI 为主，Gemini 为回退
-            if self._gemini_client.is_available():
-                return self._fallback_openai_primary.execute(call_openai, call_gemini)
-            return call_openai()
-        else:
-            # Gemini 为主，OpenAI 为回退
-            if self._openai_client.is_available():
-                return self._fallback_gemini_primary.execute(call_gemini, call_openai)
-            return call_gemini()
+            def call_fallback() -> str:
+                if self._fallback_client is None:
+                    raise Exception("备选模型客户端未初始化")
+                return self._fallback_client.generate(prompt, generation_config)
+
+            if self._primary_client.is_available():
+                return self._fallback_handler.execute(call_primary, call_fallback)
+            else:
+                return call_fallback()
+
+        # 只有主模型
+        if self._primary_client.is_available():
+            return call_primary()
+
+        raise Exception("没有可用的 AI 客户端")
 
     def analyze(self, context: dict[str, Any], news_context: str | None = None) -> AnalysisResult:
         """
@@ -108,7 +125,7 @@ class GeminiAnalyzer(IAIAnalyzer):
 
         流程：
         1. 格式化输入数据（技术面 + 新闻）
-        2. 调用 Gemini API（带重试和模型切换）
+        2. 调用 LLM API（带重试和模型回退）
         3. 解析 JSON 响应
         4. 返回结构化结果
 
@@ -123,7 +140,7 @@ class GeminiAnalyzer(IAIAnalyzer):
         config = get_config()
 
         # 请求前增加延时
-        request_delay = config.ai.gemini_request_delay
+        request_delay = config.ai.llm_request_delay
         if request_delay > 0:
             logger.debug(f"[LLM] 请求前等待 {request_delay:.1f} 秒...")
             time.sleep(request_delay)
@@ -146,9 +163,9 @@ class GeminiAnalyzer(IAIAnalyzer):
                 operation_advice="持有",
                 confidence_level="低",
                 analysis_summary="AI 分析功能未启用（未配置 API Key）",
-                risk_warning="请配置 Gemini API Key 后重试",
+                risk_warning="请配置 LLM_API_KEY 后重试",
                 success=False,
-                error_message="Gemini API Key 未配置",
+                error_message="LLM API Key 未配置",
             )
 
         try:
@@ -156,11 +173,7 @@ class GeminiAnalyzer(IAIAnalyzer):
             prompt = PromptBuilder.build_analysis_prompt(context, name, news_context)
 
             # 获取模型名称
-            model_name = "unknown"
-            if self._use_openai:
-                model_name = "openai-compatible"
-            elif self._gemini_client._current_model_name:
-                model_name = self._gemini_client._current_model_name
+            model_name = config.ai.llm_model
 
             logger.info(f"========== AI 分析 {name}({code}) ==========")
             logger.info(f"[LLM配置] 模型: {model_name}")
@@ -174,27 +187,24 @@ class GeminiAnalyzer(IAIAnalyzer):
 
             # 设置生成配置
             generation_config = {
-                "temperature": config.ai.gemini_temperature,
-                "max_output_tokens": 8192,
+                "temperature": config.ai.llm_temperature,
+                "max_output_tokens": config.ai.llm_max_tokens,
             }
 
-            api_provider = "OpenAI" if self._use_openai else "Gemini"
-            logger.info(f"[LLM调用] 开始调用 {api_provider} API...")
+            logger.info(f"[LLM调用] 开始调用 {model_name} API...")
 
             # 使用带重试的 API 调用
             start_time = time.time()
             response_text = self._call_api(prompt, generation_config)
             elapsed = time.time() - start_time
 
-            logger.info(
-                f"[LLM返回] {api_provider} API 响应成功, 耗时 {elapsed:.2f}s, 响应长度 {len(response_text)} 字符"
-            )
+            logger.info(f"[LLM返回] {model_name} API 响应成功, 耗时 {elapsed:.2f}s, 响应长度 {len(response_text)} 字符")
 
             # 记录响应预览
             response_preview = response_text[:300] + "..." if len(response_text) > 300 else response_text
             logger.info(f"[LLM返回 预览]\n{response_preview}")
             logger.debug(
-                f"=== {api_provider} 完整响应 ({len(response_text)}字符) ===\n{response_text}\n=== End Response ==="
+                f"=== {model_name} 完整响应 ({len(response_text)}字符) ===\n{response_text}\n=== End Response ==="
             )
 
             # 解析响应
@@ -222,13 +232,19 @@ class GeminiAnalyzer(IAIAnalyzer):
                 error_message=str(e),
             )
 
-    def batch_analyze(self, contexts: list[dict[str, Any]], delay_between: float = 2.0) -> list[AnalysisResult]:
+    def batch_analyze(
+        self,
+        contexts: list[dict[str, Any]],
+        delay_between: float = 2.0,
+        news_contexts: list[str | None] | None = None,
+    ) -> list[AnalysisResult]:
         """
         批量分析多只股票
 
         Args:
             contexts: 上下文数据列表
             delay_between: 每次分析之间的延迟（秒）
+            news_contexts: 新闻上下文列表（与contexts一一对应）
 
         Returns:
             AnalysisResult 列表
@@ -240,7 +256,8 @@ class GeminiAnalyzer(IAIAnalyzer):
                 logger.debug(f"等待 {delay_between} 秒后继续...")
                 time.sleep(delay_between)
 
-            result = self.analyze(context)
+            news_context = news_contexts[i] if news_contexts and i < len(news_contexts) else None
+            result = self.analyze(context, news_context=news_context)
             results.append(result)
 
         return results
@@ -264,9 +281,9 @@ class GeminiAnalyzer(IAIAnalyzer):
 
 
 # 便捷函数
-def get_analyzer() -> GeminiAnalyzer:
-    """获取 Gemini 分析器实例"""
-    return GeminiAnalyzer()
+def get_analyzer() -> AIAnalyzer:
+    """获取 AI 分析器实例"""
+    return AIAnalyzer()
 
 
 if __name__ == "__main__":
@@ -294,11 +311,11 @@ if __name__ == "__main__":
         "price_change_ratio": 1.5,
     }
 
-    analyzer = GeminiAnalyzer()
+    analyzer = AIAnalyzer()
 
     if analyzer.is_available():
         print("=== AI 分析测试 ===")
         result = analyzer.analyze(test_context)
         print(f"分析结果: {result.to_dict()}")
     else:
-        print("Gemini API 未配置，跳过测试")
+        print("LLM API 未配置，跳过测试")

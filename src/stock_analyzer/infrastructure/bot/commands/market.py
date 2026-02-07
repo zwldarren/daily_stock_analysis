@@ -68,7 +68,7 @@ class MarketCommand(BotCommand):
     def _run_market_review(self, message: BotMessage) -> None:
         """后台执行大盘复盘"""
         try:
-            from stock_analyzer.ai.analyzer import GeminiAnalyzer
+            from stock_analyzer.ai.analyzer import AIAnalyzer
             from stock_analyzer.config import get_config
             from stock_analyzer.infrastructure.bot.message_adapter import adapt_bot_message
             from stock_analyzer.infrastructure.notification import NotificationService
@@ -88,8 +88,8 @@ class MarketCommand(BotCommand):
 
             # 初始化 AI 分析器
             analyzer = None
-            if config.ai.gemini_api_key or config.ai.openai_api_key:
-                analyzer = GeminiAnalyzer()
+            if config.ai.llm_api_key:
+                analyzer = AIAnalyzer()
 
             # 执行复盘
             market_analyzer = MarketAnalyzer(search_service=search_service, analyzer=analyzer)
