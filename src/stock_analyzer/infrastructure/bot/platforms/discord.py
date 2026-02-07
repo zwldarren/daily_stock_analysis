@@ -14,8 +14,8 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from ..models import BotMessage, ChatType, WebhookResponse
-from .base import BotPlatform
+from stock_analyzer.infrastructure.bot.models import BotMessage, ChatType, WebhookResponse
+from stock_analyzer.infrastructure.bot.platforms.base import BotPlatform
 
 logger = logging.getLogger(__name__)
 

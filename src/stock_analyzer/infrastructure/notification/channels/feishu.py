@@ -8,9 +8,8 @@ from typing import Any
 
 import requests
 
-from stock_analyzer.formatters import format_feishu_markdown
-
-from ..base import NotificationChannel, NotificationChannelBase
+from stock_analyzer.infrastructure.external.feishu.formatters import format_feishu_markdown
+from stock_analyzer.infrastructure.notification.base import NotificationChannel, NotificationChannelBase
 
 logger = logging.getLogger(__name__)
 

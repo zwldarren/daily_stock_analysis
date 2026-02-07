@@ -8,7 +8,7 @@
 
 from abc import ABC, abstractmethod
 
-from ..models import BotMessage, BotResponse
+from stock_analyzer.infrastructure.bot.models import BotMessage, BotResponse
 
 
 class BotCommand(ABC):

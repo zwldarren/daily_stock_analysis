@@ -9,8 +9,8 @@
     - formatters: 数据格式化工具
 """
 
-from .logging_config import setup_logging
-from .stock_code import (
+from stock_analyzer.utils.logging_config import setup_logging
+from stock_analyzer.utils.stock_code import (
     StockType,
     detect_stock_type,
     is_etf_code,

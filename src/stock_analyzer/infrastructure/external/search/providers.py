@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from stock_analyzer.infrastructure.external.search.models import SearchResponse, SearchResult
+from stock_analyzer.domain.models import SearchResponse, SearchResult
 
 logger = logging.getLogger(__name__)
 

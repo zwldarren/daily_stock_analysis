@@ -17,8 +17,8 @@ import time
 from datetime import datetime
 from typing import Any
 
-from ..models import BotMessage, BotResponse, ChatType, WebhookResponse
-from .base import BotPlatform
+from stock_analyzer.infrastructure.bot.models import BotMessage, BotResponse, ChatType, WebhookResponse
+from stock_analyzer.infrastructure.bot.platforms.base import BotPlatform
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +42,8 @@ class DingtalkPlatform(BotPlatform):
 
         config = get_config()
 
-        self._app_key = getattr(config.dingtalk_bot, "dingtalk_app_key", None)
-        self._app_secret = getattr(config.dingtalk_bot, "dingtalk_app_secret", None)
+        self._app_key = config.dingtalk_bot.dingtalk_app_key
+        self._app_secret = config.dingtalk_bot.dingtalk_app_secret
 
     @property
     def platform_name(self) -> str:

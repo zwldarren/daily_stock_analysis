@@ -73,7 +73,7 @@ def handle_webhook(
 
     config = get_config()
 
-    if not getattr(config.bot, "bot_enabled", True):
+    if not config.bot.bot_enabled:
         logger.info("[BotHandler] 机器人功能未启用")
         return WebhookResponse.success()
 

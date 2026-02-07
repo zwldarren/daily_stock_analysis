@@ -24,7 +24,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from ..models import BotMessage, BotResponse, ChatType
+from stock_analyzer.infrastructure.bot.models import BotMessage, BotResponse, ChatType
 
 logger = logging.getLogger(__name__)
 
@@ -216,8 +216,8 @@ class DingtalkStreamClient:
 
         config = get_config()
 
-        self._client_id = client_id or getattr(config.dingtalk_bot, "dingtalk_app_key", None)
-        self._client_secret = client_secret or getattr(config.dingtalk_bot, "dingtalk_app_secret", None)
+        self._client_id = client_id or config.dingtalk_bot.dingtalk_app_key
+        self._client_secret = client_secret or config.dingtalk_bot.dingtalk_app_secret
 
         if not self._client_id or not self._client_secret:
             raise ValueError("钉钉 Stream 模式需要配置 DINGTALK_APP_KEY 和 DINGTALK_APP_SECRET")
@@ -230,7 +230,7 @@ class DingtalkStreamClient:
         """创建消息处理函数"""
 
         def handle_message(message: BotMessage) -> BotResponse:
-            from ..dispatcher import get_dispatcher
+            from stock_analyzer.infrastructure.bot.dispatcher import get_dispatcher
 
             dispatcher = get_dispatcher()
             return dispatcher.dispatch(message)

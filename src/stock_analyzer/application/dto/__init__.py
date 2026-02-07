@@ -7,11 +7,13 @@
 from stock_analyzer.application.dto.analysis_dto import (
     AnalysisRequestDTO,
     AnalysisResponseDTO,
+    CommandResult,
     StockContextDTO,
 )
 
 __all__ = [
     "AnalysisRequestDTO",
     "AnalysisResponseDTO",
+    "CommandResult",
     "StockContextDTO",
 ]

@@ -45,3 +45,15 @@ class AnalysisResponseDTO:
     error_message: str | None = None
     created_at: datetime | None = None
     raw_data: dict[str, Any] | None = None
+
+
+@dataclass
+class CommandResult:
+    """命令执行结果 DTO
+
+    用于CQRS命令层的统一返回格式
+    """
+
+    success: bool
+    message: str
+    data: Any | None = None

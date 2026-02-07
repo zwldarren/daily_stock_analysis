@@ -9,7 +9,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ..models import BotMessage, BotResponse, WebhookResponse
+from stock_analyzer.infrastructure.bot.models import BotMessage, BotResponse, WebhookResponse
 
 
 class BotPlatform(ABC):

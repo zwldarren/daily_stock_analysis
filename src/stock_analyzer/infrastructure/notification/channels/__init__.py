@@ -2,6 +2,7 @@
 通知渠道实现模块
 """
 
+from .discord import DiscordChannel
 from .email import EmailChannel
 from .feishu import FeishuChannel
 from .serverchan3 import Serverchan3Channel
@@ -14,4 +15,5 @@ __all__ = [
     "TelegramChannel",
     "EmailChannel",
     "Serverchan3Channel",
+    "DiscordChannel",
 ]

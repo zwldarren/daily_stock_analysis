@@ -5,7 +5,6 @@
 """
 
 import logging
-from pathlib import Path
 from typing import Any
 
 from stock_analyzer.config import get_config
@@ -13,7 +12,7 @@ from stock_analyzer.domain import AnalysisResult
 from stock_analyzer.infrastructure.notification.context import MessageContext
 
 from .base import ChannelDetector, NotificationChannel
-from .channels import EmailChannel, FeishuChannel, Serverchan3Channel, TelegramChannel, WechatChannel
+from .channels import DiscordChannel, EmailChannel, FeishuChannel, Serverchan3Channel, TelegramChannel, WechatChannel
 from .report_generator import ReportGenerator
 
 logger = logging.getLogger(__name__)
@@ -113,6 +112,14 @@ class NotificationService:
                 }
             )
 
+        # Discord Webhook
+        if nc.discord_webhook_url:
+            self._channels[NotificationChannel.DISCORD] = DiscordChannel(
+                {
+                    "webhook_url": nc.discord_webhook_url,
+                }
+            )
+
     def _detect_available_channels(self) -> list[NotificationChannel]:
         """检测所有已配置的渠道"""
         available = []
@@ -199,8 +206,10 @@ class NotificationService:
             date_str = datetime.now().strftime("%Y%m%d")
             filename = f"report_{date_str}.md"
 
-        # 确保 reports 目录存在
-        reports_dir = Path(__file__).parent.parent.parent.parent / "reports"
+        # 确保 reports 目录存在（使用项目根目录）
+        from stock_analyzer.config import get_project_root
+
+        reports_dir = get_project_root() / "reports"
         reports_dir.mkdir(parents=True, exist_ok=True)
 
         filepath = reports_dir / filename

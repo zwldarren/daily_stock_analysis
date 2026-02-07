@@ -12,7 +12,7 @@ from typing import Any
 
 import markdown2
 
-from ..base import NotificationChannel, NotificationChannelBase
+from stock_analyzer.infrastructure.notification.base import NotificationChannel, NotificationChannelBase
 
 logger = logging.getLogger(__name__)
 

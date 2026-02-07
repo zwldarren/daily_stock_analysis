@@ -7,6 +7,8 @@ requires-python = ">=3.14"
 dependencies = [
     "akshare>=1.18.21",
     "baostock>=0.8.9",
+    "cachetools>=7.0.0",
+    "click>=8.3.1",
     "dependency-injector>=4.41.0",
     "dingtalk-stream>=0.24.3",
     "discord-py>=2.6.4",
@@ -74,3 +76,7 @@ select = [
 [tool.pytest.ini_options]
 addopts = "--tb=short --cov=stock_analyzer --cov-report=term-missing"
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:lark_oapi.*",
+    "ignore::DeprecationWarning:.*well_known_types.*",
+]

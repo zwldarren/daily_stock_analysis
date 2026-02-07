@@ -10,9 +10,9 @@ A股自选股智能分析系统 - 主调度程序
 4. 提供命令行入口
 
 使用方式：
-    python main.py              # 正常运行
-    python main.py --debug      # 调试模式
-    python main.py --dry-run    # 仅获取数据不分析
+    python -m stock_analyzer              # 正常运行
+    python -m stock_analyzer --debug      # 调试模式
+    python -m stock_analyzer --dry-run    # 仅获取数据不分析
 
 交易理念（已融入分析）：
 - 严进策略：不追高，乖离率 > 5% 不买入
@@ -40,11 +40,13 @@ if os.getenv("GITHUB_ACTIONS") != "true" and os.getenv("USE_PROXY", "false").low
 
 from loguru import logger
 
+from stock_analyzer.infrastructure.external.feishu.doc_manager import FeishuDocManager
+
 from .ai.analyzer import GeminiAnalyzer
+from .application import register_event_handlers
+from .application.market_review import run_market_review
+from .application.services.stock_analysis_orchestrator import StockAnalysisOrchestrator
 from .config import Config, get_config
-from .core.market_review import run_market_review
-from .core.pipeline import StockAnalysisPipeline
-from .feishu_doc import FeishuDocManager
 from .infrastructure.external.search import SearchService
 from .infrastructure.notification import NotificationService
 from .utils.logging_config import setup_logging
@@ -106,21 +108,17 @@ def run_full_analysis(config: Config, args: argparse.Namespace, stock_codes: lis
         if getattr(args, "single_notify", False):
             config.notification_message.single_stock_notify = True
 
-        # 创建调度器
-        save_context_snapshot = None
-        if getattr(args, "no_context_snapshot", False):
-            save_context_snapshot = False
+        # 创建编排器
         query_id = uuid.uuid4().hex
-        pipeline = StockAnalysisPipeline(
+        orchestrator = StockAnalysisOrchestrator(
             config=config,
             max_workers=args.workers,
             query_id=query_id,
             query_source="cli",
-            save_context_snapshot=save_context_snapshot,
         )
 
         # 1. 运行个股分析
-        results = pipeline.run(stock_codes=stock_codes, dry_run=args.dry_run, send_notification=not args.no_notify)
+        results = orchestrator.run(stock_codes=stock_codes, dry_run=args.dry_run, send_notification=not args.no_notify)
 
         # Issue #128: 分析间隔 - 在个股分析和大盘分析之间添加延迟
         analysis_delay = config.schedule.analysis_delay
@@ -131,11 +129,18 @@ def run_full_analysis(config: Config, args: argparse.Namespace, stock_codes: lis
         # 2. 运行大盘复盘（如果启用且不是仅个股模式）
         market_report = ""
         if config.schedule.market_review_enabled and not args.no_market_review:
+            # 从容器获取AI分析器和搜索服务
+            from stock_analyzer.container import get_container
+
+            container = get_container()
+            analyzer = container.ai_analyzer()
+            search_service = container.search_service()
+
             # 只调用一次，并获取结果
             review_result = run_market_review(
-                notifier=pipeline.notifier,
-                analyzer=pipeline.analyzer,
-                search_service=pipeline.search_service,
+                notifier=orchestrator.notifier,
+                analyzer=analyzer,
+                search_service=search_service,
                 send_notification=not args.no_notify,
             )
             # 如果有结果，赋值给 market_report 用于后续飞书文档生成
@@ -174,7 +179,7 @@ def run_full_analysis(config: Config, args: argparse.Namespace, stock_codes: lis
 
                 # 添加个股决策仪表盘（使用 NotificationService 生成）
                 if results:
-                    dashboard_content = pipeline.notifier.generate_dashboard_report(results)
+                    dashboard_content = orchestrator.notifier.generate_dashboard_report(results)
                     full_content += f"# 🚀 个股决策仪表盘\n\n{dashboard_content}"
 
                 # 3. 创建文档
@@ -183,7 +188,7 @@ def run_full_analysis(config: Config, args: argparse.Namespace, stock_codes: lis
                     logger.info(f"飞书云文档创建成功: {doc_url}")
                     # 可选：将文档链接也推送到群里
                     if not args.no_notify:
-                        pipeline.notifier.send(f"[{now.strftime('%Y-%m-%d %H:%M')}] 复盘文档创建成功: {doc_url}")
+                        orchestrator.notifier.send(f"[{now.strftime('%Y-%m-%d %H:%M')}] 复盘文档创建成功: {doc_url}")
 
         except Exception as e:
             logger.error(f"飞书文档生成失败: {e}")
@@ -254,6 +259,9 @@ def main() -> int:
     logger.info(f"运行时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * 60)
 
+    # 注册事件处理器（激活DDD事件系统）
+    register_event_handlers()
+
     # 验证配置
     warnings = config.validate_config()
     for warning in warnings:
@@ -303,7 +311,7 @@ def main() -> int:
             logger.info("模式: 定时任务")
             logger.info(f"每日执行时间: {config.schedule.schedule_time}")
 
-            from stock_analyzer.scheduler import run_with_schedule
+            from stock_analyzer.application.scheduler import run_with_schedule
 
             def scheduled_task():
                 run_full_analysis(config, args, stock_codes)

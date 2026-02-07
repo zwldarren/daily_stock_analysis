@@ -27,9 +27,8 @@ from collections.abc import Callable
 from datetime import datetime
 
 from stock_analyzer.config import get_config
-from stock_analyzer.formatters import chunk_feishu_content, format_feishu_markdown
-
-from ..models import BotMessage, BotResponse, ChatType
+from stock_analyzer.infrastructure.bot.models import BotMessage, BotResponse, ChatType
+from stock_analyzer.infrastructure.external.feishu.formatters import chunk_feishu_content, format_feishu_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +73,7 @@ class FeishuReplyClient:
 
         # 获取配置的最大字节数
         config = get_config()
-        self._max_bytes = getattr(config.notification_message, "feishu_max_bytes", 20000)
+        self._max_bytes = config.notification_message.feishu_max_bytes
 
     def _send_interactive_card(
         self,
@@ -435,8 +434,8 @@ class FeishuStreamClient:
 
         config = get_config()
 
-        self._app_id = app_id or getattr(config.feishu_doc, "feishu_app_id", None)
-        self._app_secret = app_secret or getattr(config.feishu_doc, "feishu_app_secret", None)
+        self._app_id = app_id or config.feishu_doc.feishu_app_id
+        self._app_secret = app_secret or config.feishu_doc.feishu_app_secret
 
         if not self._app_id or not self._app_secret:
             raise ValueError("飞书 Stream 模式需要配置 FEISHU_APP_ID 和 FEISHU_APP_SECRET")
@@ -450,7 +449,7 @@ class FeishuStreamClient:
         """创建消息处理函数"""
 
         def handle_message(message: BotMessage) -> BotResponse:
-            from ..dispatcher import get_dispatcher
+            from stock_analyzer.infrastructure.bot.dispatcher import get_dispatcher
 
             dispatcher = get_dispatcher()
             return dispatcher.dispatch(message)
@@ -473,8 +472,8 @@ class FeishuStreamClient:
         # 但 SDK 要求传入（可以为空字符串）
         config = get_config()
 
-        encrypt_key = getattr(config.feishu_bot, "feishu_encrypt_key", "") or ""
-        verification_token = getattr(config.feishu_bot, "feishu_verification_token", "") or ""
+        encrypt_key = config.feishu_bot.feishu_encrypt_key or ""
+        verification_token = config.feishu_bot.feishu_verification_token or ""
 
         event_handler = (
             lark.EventDispatcherHandler.builder(

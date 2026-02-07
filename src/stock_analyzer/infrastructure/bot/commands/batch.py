@@ -10,8 +10,8 @@ import logging
 import threading
 import uuid
 
-from ..models import BotMessage, BotResponse
-from .base import BotCommand
+from stock_analyzer.infrastructure.bot.commands.base import BotCommand
+from stock_analyzer.infrastructure.bot.models import BotMessage, BotResponse
 
 logger = logging.getLogger(__name__)
 
@@ -91,18 +91,18 @@ class BatchCommand(BotCommand):
     def _run_batch_analysis(self, stock_list: list[str], message: BotMessage) -> None:
         """后台执行批量分析"""
         try:
-            from stock_analyzer.__main__ import StockAnalysisPipeline
+            from stock_analyzer.application.services.stock_analysis_orchestrator import StockAnalysisOrchestrator
             from stock_analyzer.config import get_config
 
             config = get_config()
 
-            # 创建分析管道
-            pipeline = StockAnalysisPipeline(
+            # 创建分析编排器
+            orchestrator = StockAnalysisOrchestrator(
                 config=config, source_message=message, query_id=uuid.uuid4().hex, query_source="bot"
             )
 
             # 执行分析（会自动推送汇总报告）
-            results = pipeline.run(stock_codes=stock_list, dry_run=False, send_notification=True)
+            results = orchestrator.run(stock_codes=stock_list, dry_run=False, send_notification=True)
 
             logger.info(f"[BatchCommand] 批量分析完成，成功 {len(results)} 只")
 

@@ -7,8 +7,10 @@
 import logging
 import time
 from datetime import datetime
+from typing import Any
 
-from stock_analyzer.infrastructure.external.search.models import SearchResponse
+from stock_analyzer.domain.models import SearchResponse
+from stock_analyzer.domain.services.interfaces import ISearchService
 from stock_analyzer.infrastructure.external.search.providers import (
     BaseSearchProvider,
     BochaSearchProvider,
@@ -20,7 +22,7 @@ from stock_analyzer.infrastructure.external.search.providers import (
 logger = logging.getLogger(__name__)
 
 
-class SearchService:
+class SearchService(ISearchService):
     """
     搜索服务
 
@@ -331,6 +333,49 @@ class SearchService:
                 success=False,
                 error_message="增强搜索未找到相关信息",
             )
+
+    def search_single_query(self, query: str, max_results: int = 10) -> dict[str, Any] | None:
+        """
+        执行单次搜索查询
+
+        Args:
+            query: 搜索关键词
+            max_results: 最大结果数
+
+        Returns:
+            dict[str, Any] | None: 搜索结果字典，失败返回 None
+        """
+        # 依次尝试各个搜索引擎
+        for provider in self._providers:
+            if not provider.is_available:
+                continue
+
+            try:
+                response = provider.search(query, max_results)
+
+                if response.success and response.results:
+                    # 转换为字典格式返回
+                    return {
+                        "query": response.query,
+                        "results": [
+                            {
+                                "title": r.title,
+                                "snippet": r.snippet,
+                                "url": r.url,
+                                "published_date": r.published_date,
+                            }
+                            for r in response.results
+                        ],
+                        "provider": response.provider,
+                        "success": response.success,
+                    }
+            except Exception as e:
+                logger.warning(f"[单次搜索] {provider.name} 搜索异常: {e}")
+                continue
+
+        # 所有引擎都失败
+        logger.warning(f"[单次搜索] 所有搜索引擎都失败: {query}")
+        return None
 
 
 # === 便捷函数 ===

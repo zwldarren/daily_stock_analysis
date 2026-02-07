@@ -11,7 +11,7 @@ from typing import Any
 
 import requests
 
-from ..base import NotificationChannel, NotificationChannelBase
+from stock_analyzer.infrastructure.notification.base import NotificationChannel, NotificationChannelBase
 
 logger = logging.getLogger(__name__)
 

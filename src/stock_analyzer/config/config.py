@@ -410,3 +410,12 @@ class Config(BaseSettings):
 @lru_cache
 def get_config() -> Config:
     return Config()
+
+
+def get_project_root() -> Path:
+    """获取项目根目录路径
+
+    Returns:
+        项目根目录（包含 pyproject.toml 或 .env 的目录）
+    """
+    return _PROJECT_ROOT

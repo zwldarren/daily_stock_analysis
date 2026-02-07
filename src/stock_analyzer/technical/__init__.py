@@ -4,16 +4,15 @@
 包含趋势分析器、技术指标计算等
 """
 
-from stock_analyzer.technical.trend_analyzer import (
+from stock_analyzer.technical.enums import (
     BuySignal,
     MACDStatus,
     RSIStatus,
-    StockTrendAnalyzer,
-    TrendAnalysisResult,
     TrendStatus,
     VolumeStatus,
-    analyze_stock,
 )
+from stock_analyzer.technical.result import TrendAnalysisResult
+from stock_analyzer.technical.trend_analyzer import StockTrendAnalyzer
 
 __all__ = [
     "BuySignal",
@@ -23,5 +22,4 @@ __all__ = [
     "TrendAnalysisResult",
     "TrendStatus",
     "VolumeStatus",
-    "analyze_stock",
 ]

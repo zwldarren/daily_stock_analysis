@@ -15,13 +15,15 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from stock_analyzer.data_provider.base import (
-    STANDARD_COLUMNS,
-    BaseFetcher,
-    DataFetcherManager,
+from stock_analyzer.domain.exceptions import (
     DataFetchError,
     DataSourceUnavailableError,
     RateLimitError,
+)
+from stock_analyzer.infrastructure.external.data_sources.fetchers.base import (
+    STANDARD_COLUMNS,
+    BaseFetcher,
+    DataFetcherManager,
 )
 
 
@@ -155,21 +157,15 @@ class TestBaseFetcher:
         assert "close" in df.columns
         assert "volume" in df.columns
 
-    def test_get_daily_data_with_ma(self) -> None:
-        """测试获取数据包含移动平均线"""
+    def test_get_daily_data_no_indicators(self) -> None:
+        """测试获取数据不包含技术指标（由 IndicatorService 计算）"""
         fetcher = ConcreteFetcher()
         df = fetcher.get_daily_data("600519", days=30)
 
-        assert "ma5" in df.columns
-        assert "ma10" in df.columns
-        assert "ma20" in df.columns
-
-    def test_get_daily_data_with_volume_ratio(self) -> None:
-        """测试获取数据包含量比指标"""
-        fetcher = ConcreteFetcher()
-        df = fetcher.get_daily_data("600519", days=30)
-
-        assert "volume_ratio" in df.columns
+        # BaseFetcher 不再计算技术指标，这些应该由 IndicatorService 处理
+        assert "ma5" not in df.columns
+        assert "ma10" not in df.columns
+        assert "volume_ratio" not in df.columns
 
     def test_get_daily_data_empty_result(self) -> None:
         """测试获取空数据时抛出异常"""
@@ -186,35 +182,6 @@ class TestBaseFetcher:
         fetcher = EmptyFetcher()
         with pytest.raises(DataFetchError, match="未获取到"):
             fetcher.get_daily_data("600519", "2024-01-01", "2024-01-10")
-
-    def test_clean_data_removes_na(self) -> None:
-        """测试数据清洗会移除包含空值的行"""
-        fetcher = ConcreteFetcher()
-
-        # 创建包含空值的数据
-        df = pd.DataFrame(
-            {
-                "date": pd.date_range("2024-01-01", periods=3),
-                "open": [100.0, None, 102.0],
-                "high": [101.0, 102.0, 103.0],
-                "low": [99.0, 100.0, 101.0],
-                "close": [100.5, 101.5, None],  # 空值行应被移除
-                "volume": [10000, 11000, 12000],
-            }
-        )
-
-        cleaned = fetcher._clean_data(df)
-        # 由于 close 和 open 列有空值，对应行会被移除
-        assert len(cleaned) < len(df)
-
-    def test_random_sleep(self) -> None:
-        """测试随机休眠功能"""
-        with patch("time.sleep") as mock_sleep:
-            BaseFetcher.random_sleep(min_seconds=0.1, max_seconds=0.2)
-            mock_sleep.assert_called_once()
-            # 验证调用参数在范围内
-            call_args = mock_sleep.call_args[0][0]
-            assert 0.1 <= call_args <= 0.2
 
 
 # =============================================================================

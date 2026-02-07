@@ -305,10 +305,10 @@ def get_dispatcher() -> CommandDispatcher:
 
         # 创建分发器
         _dispatcher = CommandDispatcher(
-            command_prefix=getattr(config.bot, "bot_command_prefix", "/"),
-            rate_limit_requests=getattr(config.bot, "bot_rate_limit_requests", 10),
-            rate_limit_window=getattr(config.bot, "bot_rate_limit_window", 60),
-            admin_users=getattr(config.bot, "bot_admin_users", []),
+            command_prefix=config.bot.bot_command_prefix,
+            rate_limit_requests=config.bot.bot_rate_limit_requests,
+            rate_limit_window=config.bot.bot_rate_limit_window,
+            admin_users=config.bot.bot_admin_users,
         )
 
         # 自动注册所有命令

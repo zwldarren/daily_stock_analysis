@@ -21,11 +21,13 @@ from stock_analyzer.config.config import (
     SearchConfig,
     SystemConfig,
     get_config,
+    get_project_root,
 )
 
 __all__ = [
     "Config",
     "get_config",
+    "get_project_root",
     "AIConfig",
     "SearchConfig",
     "NotificationChannelConfig",

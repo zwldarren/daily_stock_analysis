@@ -6,8 +6,8 @@
 显示可用命令列表和使用说明。
 """
 
-from ..models import BotMessage, BotResponse
-from .base import BotCommand
+from stock_analyzer.infrastructure.bot.commands.base import BotCommand
+from stock_analyzer.infrastructure.bot.models import BotMessage, BotResponse
 
 
 class HelpCommand(BotCommand):
@@ -41,7 +41,7 @@ class HelpCommand(BotCommand):
     def execute(self, message: BotMessage, args: list[str]) -> BotResponse:
         """执行帮助命令"""
         # 延迟导入避免循环依赖
-        from ..dispatcher import get_dispatcher
+        from stock_analyzer.infrastructure.bot.dispatcher import get_dispatcher
 
         dispatcher = get_dispatcher()
 

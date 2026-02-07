@@ -2,13 +2,16 @@
 股票分析应用服务
 
 应用服务层，协调领域层和基础设施层完成分析用例。
+
+注意：本模块提供便捷函数，实际逻辑委托给StockAnalysisOrchestrator和Command层。
 """
 
 import uuid
 
+from stock_analyzer.application.market_review import run_market_review
+from stock_analyzer.application.services.stock_analysis_orchestrator import StockAnalysisOrchestrator
 from stock_analyzer.config import Config, get_config
-from stock_analyzer.core.market_review import run_market_review
-from stock_analyzer.core.pipeline import StockAnalysisPipeline
+from stock_analyzer.container import get_container
 from stock_analyzer.domain import AnalysisResult, ReportType
 from stock_analyzer.infrastructure.notification import NotificationService
 
@@ -34,22 +37,16 @@ def analyze_stock(
     if config is None:
         config = get_config()
 
-    # 创建分析流水线
-    pipeline = StockAnalysisPipeline(config=config, query_id=uuid.uuid4().hex, query_source="cli")
+    # 创建分析编排器
+    orchestrator = StockAnalysisOrchestrator(config=config, query_id=uuid.uuid4().hex, query_source="cli")
 
     # 使用通知服务（如果提供）
     if notifier:
-        pipeline.notifier = notifier
-
-    # 根据full_report参数设置报告类型
-    report_type = ReportType.FULL if full_report else ReportType.SIMPLE
+        orchestrator.notifier = notifier
 
     # 运行单只股票分析
-    result = pipeline.process_single_stock(
-        code=stock_code,
-        skip_analysis=False,
-        single_stock_notify=notifier is not None,
-        report_type=report_type,
+    result = orchestrator.analyze_single_stock(
+        code=stock_code, report_type=ReportType.FULL if full_report else ReportType.SIMPLE
     )
 
     return result
@@ -76,11 +73,15 @@ def analyze_stocks(
     if config is None:
         config = get_config()
 
-    results = []
-    for stock_code in stock_codes:
-        result = analyze_stock(stock_code, config, full_report, notifier)
-        if result:
-            results.append(result)
+    # 创建分析编排器
+    orchestrator = StockAnalysisOrchestrator(config=config, query_id=uuid.uuid4().hex, query_source="cli")
+
+    # 使用通知服务（如果提供）
+    if notifier:
+        orchestrator.notifier = notifier
+
+    # 运行批量分析
+    results = orchestrator.run(stock_codes=stock_codes, dry_run=False, send_notification=notifier is not None)
 
     return results
 
@@ -99,13 +100,15 @@ def perform_market_review(config: Config | None = None, notifier: NotificationSe
     if config is None:
         config = get_config()
 
-    # 创建分析流水线以获取analyzer和search_service
-    pipeline = StockAnalysisPipeline(config=config, query_id=uuid.uuid4().hex, query_source="cli")
+    # 从容器获取依赖
+    container = get_container()
+    analyzer = container.ai_analyzer()
+    search_service = container.search_service()
 
-    # 使用提供的通知服务或创建新的
-    review_notifier = notifier or pipeline.notifier
+    # 创建通知服务（如果没有提供）
+    if notifier is None:
+        orchestrator = StockAnalysisOrchestrator(config=config, query_id=uuid.uuid4().hex, query_source="cli")
+        notifier = orchestrator.notifier
 
     # 调用大盘复盘函数
-    return run_market_review(
-        notifier=review_notifier, analyzer=pipeline.analyzer, search_service=pipeline.search_service
-    )
+    return run_market_review(notifier=notifier, analyzer=analyzer, search_service=search_service)

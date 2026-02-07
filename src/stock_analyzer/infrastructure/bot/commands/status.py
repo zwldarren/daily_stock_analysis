@@ -10,8 +10,8 @@ import platform
 import sys
 from datetime import datetime
 
-from ..models import BotMessage, BotResponse
-from .base import BotCommand
+from stock_analyzer.infrastructure.bot.commands.base import BotCommand
+from stock_analyzer.infrastructure.bot.models import BotMessage, BotResponse
 
 
 class StatusCommand(BotCommand):

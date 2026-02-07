@@ -9,11 +9,10 @@
 import logging
 import threading
 
+from stock_analyzer.application.services.market_analyzer import MarketAnalyzer
+from stock_analyzer.infrastructure.bot.commands.base import BotCommand
+from stock_analyzer.infrastructure.bot.models import BotMessage, BotResponse
 from stock_analyzer.infrastructure.external.search import SearchService
-from stock_analyzer.market_analyzer import MarketAnalyzer
-
-from ..models import BotMessage, BotResponse
-from .base import BotCommand
 
 logger = logging.getLogger(__name__)
 

@@ -4,8 +4,8 @@ BotMessage 适配器模块
 将 BotMessage 适配为 MessageContext，实现通知服务的解耦。
 """
 
-from ..notification.context import MessageContext
-from .models import BotMessage
+from stock_analyzer.infrastructure.bot.models import BotMessage
+from stock_analyzer.infrastructure.notification.context import MessageContext
 
 
 def adapt_bot_message(message: BotMessage | None) -> MessageContext | None:

@@ -9,8 +9,8 @@
 import logging
 import re
 
-from ..models import BotMessage, BotResponse
-from .base import BotCommand
+from stock_analyzer.infrastructure.bot.commands.base import BotCommand
+from stock_analyzer.infrastructure.bot.models import BotMessage, BotResponse
 
 logger = logging.getLogger(__name__)
 
