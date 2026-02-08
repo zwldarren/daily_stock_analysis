@@ -9,6 +9,7 @@ from typing import Any
 import requests
 
 from stock_analyzer.infrastructure.notification.base import NotificationChannel, NotificationChannelBase
+from stock_analyzer.infrastructure.notification.discord_formatter import DiscordMarkdownConverter
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class DiscordChannel(NotificationChannelBase):
     def __init__(self, config: dict[str, Any]):
         self.webhook_url: str | None = None
         super().__init__(config)
+        self.converter = DiscordMarkdownConverter()
 
     def _validate_config(self) -> None:
         """验证配置"""
@@ -47,6 +49,9 @@ class DiscordChannel(NotificationChannelBase):
         if not self.webhook_url:
             logger.warning("Discord Webhook 未配置，跳过推送")
             return False
+
+        # 转换 Markdown 格式以适配 Discord
+        content = self.converter.convert(content)
 
         # 检查长度，超长则分批发送
         if len(content) > self.MAX_LENGTH:

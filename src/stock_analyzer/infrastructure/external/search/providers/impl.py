@@ -138,7 +138,7 @@ class SerpAPISearchProvider(ApiKeySearchProvider):
             }
 
             search = serpapi.search(params)
-            response = search.get_dict()
+            response = search.as_dict()
 
             # 解析结果
             results = []
