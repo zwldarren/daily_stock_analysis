@@ -40,11 +40,6 @@ Edit `.env` file with your configurations:
 # Required: Stock watchlist
 STOCK_LIST=600519,00700,NVDA
 
-# Required: AI API Key (Gemini or OpenAI)
-GEMINI_API_KEY=your_gemini_api_key
-# or
-OPENAI_API_KEY=your_openai_api_key
-
 # Optional: Notification channels
 WECHAT_WEBHOOK_URL=your_wechat_webhook
 FEISHU_WEBHOOK_URL=your_feishu_webhook

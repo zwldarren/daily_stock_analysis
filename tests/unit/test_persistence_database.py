@@ -1,6 +1,5 @@
 """Tests for storage/persistence layer."""
 
-
 from stock_analyzer.infrastructure.persistence.database import DatabaseManager
 
 

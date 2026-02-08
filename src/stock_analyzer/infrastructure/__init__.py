@@ -1,22 +1,31 @@
 """
-基础设施层 - 技术实现细节
+Infrastructure layer - Technical implementation details.
 
-该模块包含：
-- 外部服务集成 (external)
-- 通知渠道 (notification)
-- 数据持久化 (persistence)
-- 机器人平台 (bot)
-- 缓存 (cache)
+This module contains:
+- External service integrations (external)
+- Notification channels (notification)
+- Data persistence (persistence)
+- Bot platforms (bot)
+- Configuration storage (config)
+- Cache (cache)
 """
 
+from stock_analyzer.infrastructure.config import (
+    ConfigStorageImpl,
+    load_merged_config_with_db,
+    save_config_to_db_only,
+)
 from stock_analyzer.infrastructure.external.feishu import FeishuDocManager
 from stock_analyzer.infrastructure.external.search import SearchService
 from stock_analyzer.infrastructure.notification import NotificationService
 from stock_analyzer.infrastructure.persistence import get_db
 
 __all__ = [
+    "ConfigStorageImpl",
     "FeishuDocManager",
     "NotificationService",
     "SearchService",
     "get_db",
+    "load_merged_config_with_db",
+    "save_config_to_db_only",
 ]

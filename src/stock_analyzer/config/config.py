@@ -1,27 +1,32 @@
-"""Pydantic Settings 配置管理"""
+"""Pydantic Settings configuration management.
+
+This module provides type-safe configuration management using Pydantic Settings.
+It follows DDD principles by keeping configuration logic pure and free from
+infrastructure dependencies like databases.
+"""
 
 import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any
 
-from pydantic import AfterValidator, BeforeValidator, Field, computed_field, field_validator
+from pydantic import AfterValidator, BeforeValidator, Field, ValidationError, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _find_project_root() -> Path:
-    """查找项目根目录（包含 pyproject.toml 或 .env 的目录）
+    """Find project root directory (contains pyproject.toml or .env).
 
-    优先检查 PROJECT_ROOT 环境变量，用于 Docker 等场景
+    Priority check for PROJECT_ROOT environment variable for Docker scenarios.
     """
-    # 优先使用环境变量（Docker 场景）
+    # Priority: environment variable (for Docker)
     env_root = os.environ.get("PROJECT_ROOT")
     if env_root:
         path = Path(env_root)
         if path.exists():
             return path.resolve()
 
-    # 自动查找（开发环境）
+    # Auto-detect (development environment)
     current = Path(__file__).resolve()
     for parent in current.parents:
         if (parent / "pyproject.toml").exists() or (parent / ".env").exists():
@@ -34,14 +39,14 @@ _PROJECT_ROOT = _find_project_root()
 
 
 def _parse_comma_list(value: str | None) -> list[str]:
-    """解析逗号分隔的列表"""
+    """Parse comma-separated string into list."""
     if not value:
         return []
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def _parse_bool(value: str | bool | None) -> bool:
-    """解析布尔值"""
+    """Parse boolean value from string or bool."""
     if value is None:
         return False
     if isinstance(value, bool):
@@ -49,11 +54,8 @@ def _parse_bool(value: str | bool | None) -> bool:
     return str(value).lower() in ("true", "1", "yes")
 
 
-# 类型别名 - 用于布尔值字段（环境变量中的 true/false 字符串）
-EnvBool = Annotated[bool, BeforeValidator(_parse_bool)]
-
-
 def _validate_temperature(v: float) -> float:
+    """Validate LLM temperature is within valid range."""
     if not 0 <= v <= 2:
         raise ValueError("Temperature must be between 0 and 2")
     return v
@@ -61,8 +63,10 @@ def _validate_temperature(v: float) -> float:
 
 ValidTemperature = Annotated[float, AfterValidator(_validate_temperature)]
 
+# Type alias for boolean fields from environment variables
+EnvBool = Annotated[bool, BeforeValidator(_parse_bool)]
 
-# 共用的 model_config
+# Shared model configuration
 _COMMON_CONFIG = SettingsConfigDict(
     env_file=_PROJECT_ROOT / ".env",
     env_file_encoding="utf-8",
@@ -71,51 +75,51 @@ _COMMON_CONFIG = SettingsConfigDict(
 
 
 # ==========================================
-# 嵌套配置类 - 使用 BaseSettings 支持环境变量加载
+# Nested configuration classes using BaseSettings
 # ==========================================
 
 
 class AIConfig(BaseSettings):
-    """AI 模型配置 - 使用 litellm 格式支持多 provider"""
+    """AI model configuration supporting multiple providers via litellm format."""
 
     model_config = _COMMON_CONFIG
 
-    # 主模型配置（litellm 格式：provider/model-name）
+    # Primary model configuration (litellm format: provider/model-name)
     llm_model: str = Field(default="deepseek/deepseek-reasoner", validation_alias="LLM_MODEL")
     llm_api_key: str | None = Field(default=None, validation_alias="LLM_API_KEY")
     llm_base_url: str | None = Field(default=None, validation_alias="LLM_BASE_URL")
 
-    # 备选模型配置（用于失败回退）
+    # Fallback model configuration for failover
     llm_fallback_model: str | None = Field(default=None, validation_alias="LLM_FALLBACK_MODEL")
     llm_fallback_api_key: str | None = Field(default=None, validation_alias="LLM_FALLBACK_API_KEY")
     llm_fallback_base_url: str | None = Field(default=None, validation_alias="LLM_FALLBACK_BASE_URL")
 
-    # 通用生成参数
+    # Common generation parameters
     llm_temperature: ValidTemperature = Field(default=0.7, validation_alias="LLM_TEMPERATURE")
-    llm_max_tokens: int = Field(default=8192, ge=1, le=32768, validation_alias="LLM_MAX_TOKENS")
+    llm_max_tokens: int = Field(default=8192, ge=1, validation_alias="LLM_MAX_TOKENS")
     llm_request_delay: float = Field(default=2.0, validation_alias="LLM_REQUEST_DELAY")
     llm_max_retries: int = Field(default=5, ge=0, le=10, validation_alias="LLM_MAX_RETRIES")
     llm_retry_delay: float = Field(default=5.0, validation_alias="LLM_RETRY_DELAY")
 
 
 class SearchConfig(BaseSettings):
-    """搜索引擎配置"""
+    """Search engine configuration."""
 
     model_config = _COMMON_CONFIG
 
-    # 使用 str 存储原始值，通过 computed_field 返回列表
+    # Store raw values as str, return lists via computed_field
     bocha_api_keys_str: str = Field(default="", validation_alias="BOCHA_API_KEYS")
     tavily_api_keys_str: str = Field(default="", validation_alias="TAVILY_API_KEYS")
     brave_api_keys_str: str = Field(default="", validation_alias="BRAVE_API_KEYS")
     serpapi_keys_str: str = Field(default="", validation_alias="SERPAPI_API_KEYS")
 
-    # SearXNG 配置
+    # SearXNG configuration
     searxng_base_url: str = Field(default="", validation_alias="SEARXNG_BASE_URL")
     searxng_username: str | None = Field(default=None, validation_alias="SEARXNG_USERNAME")
     searxng_password: str | None = Field(default=None, validation_alias="SEARXNG_PASSWORD")
     searxng_priority: int = Field(default=1, ge=0, le=100, validation_alias="SEARXNG_PRIORITY")
 
-    # 搜索引擎优先级配置（数值越小优先级越高）
+    # Search engine priority (lower value = higher priority)
     tavily_priority: int = Field(default=2, ge=0, le=100, validation_alias="TAVILY_PRIORITY")
     brave_priority: int = Field(default=3, ge=0, le=100, validation_alias="BRAVE_PRIORITY")
     serpapi_priority: int = Field(default=4, ge=0, le=100, validation_alias="SERPAPI_PRIORITY")
@@ -143,7 +147,7 @@ class SearchConfig(BaseSettings):
 
 
 class NotificationChannelConfig(BaseSettings):
-    """通知渠道配置"""
+    """Notification channel configuration."""
 
     model_config = _COMMON_CONFIG
 
@@ -180,7 +184,7 @@ class NotificationChannelConfig(BaseSettings):
 
 
 class NotificationMessageConfig(BaseSettings):
-    """通知消息配置"""
+    """Notification message configuration."""
 
     model_config = _COMMON_CONFIG
 
@@ -199,7 +203,7 @@ class NotificationMessageConfig(BaseSettings):
 
 
 class DatabaseConfig(BaseSettings):
-    """数据库配置"""
+    """Database configuration."""
 
     model_config = _COMMON_CONFIG
 
@@ -208,7 +212,7 @@ class DatabaseConfig(BaseSettings):
 
 
 class LoggingConfig(BaseSettings):
-    """日志配置"""
+    """Logging configuration."""
 
     model_config = _COMMON_CONFIG
 
@@ -225,7 +229,7 @@ class LoggingConfig(BaseSettings):
 
 
 class SystemConfig(BaseSettings):
-    """系统配置"""
+    """System configuration."""
 
     model_config = _COMMON_CONFIG
 
@@ -236,7 +240,7 @@ class SystemConfig(BaseSettings):
 
 
 class ScheduleConfig(BaseSettings):
-    """定时任务配置"""
+    """Scheduled task configuration."""
 
     model_config = _COMMON_CONFIG
 
@@ -247,7 +251,7 @@ class ScheduleConfig(BaseSettings):
 
 
 class RealtimeQuoteConfig(BaseSettings):
-    """实时行情配置"""
+    """Real-time quote configuration."""
 
     model_config = _COMMON_CONFIG
 
@@ -261,7 +265,7 @@ class RealtimeQuoteConfig(BaseSettings):
 
 
 class BotConfig(BaseSettings):
-    """机器人配置"""
+    """Bot configuration."""
 
     model_config = _COMMON_CONFIG
 
@@ -278,7 +282,7 @@ class BotConfig(BaseSettings):
 
 
 class FeishuBotConfig(BaseSettings):
-    """飞书机器人配置"""
+    """Feishu bot configuration."""
 
     model_config = _COMMON_CONFIG
 
@@ -288,7 +292,7 @@ class FeishuBotConfig(BaseSettings):
 
 
 class DingtalkBotConfig(BaseSettings):
-    """钉钉机器人配置"""
+    """DingTalk bot configuration."""
 
     model_config = _COMMON_CONFIG
 
@@ -298,7 +302,7 @@ class DingtalkBotConfig(BaseSettings):
 
 
 class FeishuDocConfig(BaseSettings):
-    """飞书云文档配置"""
+    """Feishu document configuration."""
 
     model_config = _COMMON_CONFIG
 
@@ -308,13 +312,13 @@ class FeishuDocConfig(BaseSettings):
 
 
 class DataSourceConfig(BaseSettings):
-    """数据源配置"""
+    """Data source configuration."""
 
     model_config = _COMMON_CONFIG
 
     tushare_token: str | None = Field(default=None, validation_alias="TUSHARE_TOKEN")
 
-    # 数据源优先级配置（数值越小优先级越高）
+    # Data source priority (lower value = higher priority)
     efinance_priority: int = Field(default=0, ge=0, le=10, validation_alias="EFINANCE_PRIORITY")
     akshare_priority: int = Field(default=1, ge=0, le=10, validation_alias="AKSHARE_PRIORITY")
     tushare_priority: int = Field(default=2, ge=0, le=10, validation_alias="TUSHARE_PRIORITY")
@@ -324,18 +328,16 @@ class DataSourceConfig(BaseSettings):
 
 
 # ==========================================
-# 主配置类
+# Main configuration class
 # ==========================================
 
 
 class Config(BaseSettings):
-    """
-    系统主配置类
+    """Main system configuration class.
 
-    使用 pydantic-settings 自动从环境变量加载配置
-    支持 .env 文件和嵌套配置模型
-
-    嵌套配置类各自独立加载环境变量，无需手动处理
+    Uses pydantic-settings to automatically load configuration from environment variables.
+    Supports .env files and nested configuration models.
+    Each nested configuration class loads environment variables independently.
     """
 
     model_config = SettingsConfigDict(
@@ -346,10 +348,10 @@ class Config(BaseSettings):
         env_parse_none_str="null",
     )
 
-    # 基础配置
+    # Basic configuration
     stock_list_str: str = Field(default="", validation_alias="STOCK_LIST")
 
-    # 嵌套配置 - 每个子配置类独立加载环境变量
+    # Nested configurations - each loads environment variables independently
     ai: AIConfig = Field(default_factory=AIConfig)
     search: SearchConfig = Field(default_factory=SearchConfig)
     notification_channel: NotificationChannelConfig = Field(default_factory=NotificationChannelConfig)
@@ -368,7 +370,7 @@ class Config(BaseSettings):
     @field_validator("stock_list_str", mode="before")
     @classmethod
     def parse_stock_list(cls, v: Any) -> Any:
-        """解析股票列表"""
+        """Parse stock list from string."""
         if isinstance(v, str):
             return v
         return ""
@@ -379,27 +381,27 @@ class Config(BaseSettings):
         return _parse_comma_list(self.stock_list_str)
 
     # ==========================================
-    # 方法
+    # Methods
     # ==========================================
 
     def get_db_url(self) -> str:
-        """获取 SQLAlchemy 数据库连接 URL"""
+        """Get SQLAlchemy database connection URL.
+
+        Creates parent directories if they don't exist.
+        """
         db_path = Path(self.database.database_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
         return f"sqlite:///{db_path.absolute()}"
 
     def validate_config(self) -> list[str]:
-        """验证配置完整性并返回警告信息列表"""
+        """Validate configuration completeness and return list of warnings."""
         warnings_list: list[str] = []
 
         if not self.stock_list:
             warnings_list.append("警告：未配置自选股列表 (STOCK_LIST)")
 
-        if not self.datasource.tushare_token:
-            warnings_list.append("提示：未配置 Tushare Token，将使用其他数据源")
-
         if not self.ai.llm_api_key:
-            warnings_list.append("警告：未配置 LLM API Key（LLM_API_KEY），AI 分析功能将不可用")
+            warnings_list.append("警告：未配置大模型 API Key（LLM_API_KEY），AI 分析功能将不可用")
 
         if (
             not self.search.bocha_api_keys
@@ -410,7 +412,7 @@ class Config(BaseSettings):
         ):
             warnings_list.append("提示：未配置任何搜索引擎，新闻搜索功能将不可用")
 
-        # 检查通知配置
+        # Check notification configuration
         has_notification = (
             self.notification_channel.wechat_webhook_url
             or self.notification_channel.feishu_webhook_url
@@ -426,20 +428,74 @@ class Config(BaseSettings):
         return warnings_list
 
     def refresh_stock_list(self) -> None:
-        """热读取 STOCK_LIST 环境变量并更新配置"""
-        # 清除缓存并重新实例化
+        """Hot reload STOCK_LIST from environment variable and update config."""
+        # Clear cache and re-instantiate
         get_config.cache_clear()
 
 
 @lru_cache
 def get_config() -> Config:
+    """Get cached configuration instance.
+
+    Loads configuration from environment variables and .env file.
+    Database configuration loading is handled separately in infrastructure layer.
+
+    Returns:
+        Config instance with all settings loaded.
+    """
     return Config()
 
 
-def get_project_root() -> Path:
-    """获取项目根目录路径
+def get_config_safe() -> tuple[Config | None, list[str]]:
+    """Safely load configuration, returning partial config even if incomplete.
 
     Returns:
-        项目根目录（包含 pyproject.toml 或 .env 的目录）
+        tuple: (Config object or None, list of error messages)
+    """
+    errors = []
+    try:
+        config = Config()
+        return config, []
+    except ValidationError as e:
+        # Configuration validation failed
+        errors.append(f"配置加载失败: {e}")
+        return None, errors
+    except Exception as e:
+        errors.append(f"配置加载异常: {e}")
+        return None, errors
+
+
+def check_config_valid(config: Config | None) -> tuple[bool, list[str]]:
+    """Check if configuration is valid (contains minimum required config).
+
+    Returns:
+        tuple: (is_valid, list of missing configuration items)
+    """
+    if config is None:
+        return False, ["配置未加载"]
+
+    missing = []
+
+    # Check required AI configuration
+    if not config.ai.llm_api_key:
+        missing.append("LLM_API_KEY (AI 模型 API 密钥)")
+
+    # Check stock list
+    if not config.stock_list:
+        missing.append("STOCK_LIST (股票代码列表)")
+
+    # Check AI model
+    if not config.ai.llm_model:
+        missing.append("LLM_MODEL (AI 模型名称)")
+
+    is_valid = len(missing) == 0
+    return is_valid, missing
+
+
+def get_project_root() -> Path:
+    """Get project root directory path.
+
+    Returns:
+        Project root directory (contains pyproject.toml or .env)
     """
     return _PROJECT_ROOT

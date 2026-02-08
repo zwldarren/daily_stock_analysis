@@ -9,6 +9,8 @@ import hashlib
 import json
 import logging
 import re
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -108,9 +110,10 @@ class DatabaseManager:
         except Exception as e:
             logger.warning(f"清理数据库引擎时出错: {e}")
 
-    def get_session(self) -> Session:
+    @contextmanager
+    def get_session(self) -> Generator[Session]:
         """
-        获取数据库 Session
+        获取数据库 Session（上下文管理器）
 
         使用示例:
             with db.get_session() as session:
@@ -119,10 +122,12 @@ class DatabaseManager:
         """
         session = self._SessionLocal()
         try:
-            return session
+            yield session
         except Exception:
-            session.close()
+            session.rollback()
             raise
+        finally:
+            session.close()
 
     def has_today_data(self, code: str, target_date: date | None = None) -> bool:
         """

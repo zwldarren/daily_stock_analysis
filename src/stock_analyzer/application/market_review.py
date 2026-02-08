@@ -24,6 +24,7 @@ def run_market_review(
     analyzer: IAIAnalyzer | None = None,
     search_service: ISearchService | None = None,
     send_notification: bool = True,
+    dry_run: bool = False,
 ) -> str | None:
     """
     执行大盘复盘分析
@@ -33,10 +34,15 @@ def run_market_review(
         analyzer: AI分析器（可选）
         search_service: 搜索服务（可选）
         send_notification: 是否发送通知
+        dry_run: 仅获取数据，不进行 AI 分析
 
     Returns:
         复盘报告文本
     """
+    if dry_run:
+        logger.info("Dry-run模式：跳过大盘复盘分析")
+        return None
+
     logger.info("开始执行大盘复盘分析...")
 
     try:

@@ -35,13 +35,14 @@ from stock_analyzer.infrastructure.external.feishu.doc_manager import FeishuDocM
 from .application import register_event_handlers
 from .application.market_review import run_market_review
 from .application.services.stock_analysis_orchestrator import StockAnalysisOrchestrator
-from .config import Config, get_config
+from .cli.setup_wizard import init_command
+from .config import Config, check_config_valid, get_config, get_config_safe
 from .infrastructure.external.search import SearchService
 from .infrastructure.notification import NotificationService
 from .utils.logging_config import setup_logging
 
 
-@click.command()
+@click.group(invoke_without_command=True)
 @click.option("--debug", is_flag=True, help="启用调试模式，输出详细日志")
 @click.option("--dry-run", is_flag=True, help="仅获取数据，不进行 AI 分析")
 @click.option("--stocks", type=str, help="指定要分析的股票代码，逗号分隔（覆盖配置文件）")
@@ -56,7 +57,10 @@ from .utils.logging_config import setup_logging
 @click.option("--market-review", is_flag=True, help="仅运行大盘复盘分析")
 @click.option("--no-market-review", is_flag=True, help="跳过大盘复盘分析")
 @click.option("--no-context-snapshot", is_flag=True, help="不保存分析上下文快照")
-def main(
+@click.option("--skip-config-check", is_flag=True, help="跳过配置检查（高级用户）")
+@click.pass_context
+def cli(
+    ctx: click.Context,
     debug: bool,
     dry_run: bool,
     stocks: str | None,
@@ -67,6 +71,7 @@ def main(
     market_review: bool,
     no_market_review: bool,
     no_context_snapshot: bool,
+    skip_config_check: bool,
 ) -> int:
     """A股自选股智能分析系统
 
@@ -81,7 +86,57 @@ def main(
         stock-analyzer --single-notify    # 启用单股推送模式
         stock-analyzer --schedule         # 启用定时任务模式
         stock-analyzer --market-review    # 仅运行大盘复盘
+        stock-analyzer init               # 运行配置初始化向导
     """
+    # 如果没有子命令，运行主程序
+    if ctx.invoked_subcommand is None:
+        return run_main(
+            debug,
+            dry_run,
+            stocks,
+            no_notify,
+            single_notify,
+            workers,
+            schedule,
+            market_review,
+            no_market_review,
+            no_context_snapshot,
+            skip_config_check,
+        )
+    return 0
+
+
+def run_main(
+    debug: bool,
+    dry_run: bool,
+    stocks: str | None,
+    no_notify: bool,
+    single_notify: bool,
+    workers: int | None,
+    schedule: bool,
+    market_review: bool,
+    no_market_review: bool,
+    no_context_snapshot: bool,
+    skip_config_check: bool,
+) -> int:
+    """运行主程序逻辑"""
+    # 检查配置（除非跳过）
+    if not skip_config_check:
+        config, errors = get_config_safe()
+        is_valid, missing = check_config_valid(config)
+
+        if not is_valid:
+            from rich.console import Console
+
+            console = Console()
+            console.print("\n[bold yellow]⚠️ 未检测到有效配置[/bold yellow]")
+            console.print("\n[dim]缺少以下必需配置:[/dim]")
+            for item in missing:
+                console.print(f"  - {item}")
+            console.print("\n[dim]请运行以下命令完成初始化:[/dim]")
+            console.print("  [bold cyan]stock-analyzer init[/bold cyan]")
+            return 1
+
     # 加载配置（在设置日志前加载，以获取日志目录）
     config = get_config()
 
@@ -151,6 +206,7 @@ def main(
                 analyzer=analyzer,
                 search_service=search_service,
                 send_notification=not no_notify,
+                dry_run=dry_run,
             )
             return 0
 
@@ -255,6 +311,7 @@ def run_full_analysis(
                 analyzer=analyzer,
                 search_service=search_service,
                 send_notification=not no_notify,
+                dry_run=dry_run,
             )
             # 如果有结果，赋值给 market_report 用于后续飞书文档生成
             if review_result:
@@ -308,6 +365,16 @@ def run_full_analysis(
 
     except Exception as e:
         logger.exception(f"分析流程执行失败: {e}")
+
+
+# 添加 init 子命令
+cli.add_command(init_command)
+
+
+# 主入口点
+def main() -> int:
+    """程序主入口"""
+    return cli()
 
 
 if __name__ == "__main__":

@@ -190,7 +190,7 @@ class StockAnalysisOrchestrator:
 
     def _run_analysis_mode(self, stock_codes: list[str], send_notification: bool) -> list[AnalysisResult]:
         """正常分析模式：使用CQRS Command层执行批量分析"""
-        logger.info("使用CQRS Command层执行批量分析")
+        logger.debug("使用CQRS Command层执行批量分析")
 
         # 获取报告类型配置
         report_type_str = self.config.notification_message.report_type.lower()
